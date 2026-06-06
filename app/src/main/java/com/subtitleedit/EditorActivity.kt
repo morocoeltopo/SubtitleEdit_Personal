@@ -34,6 +34,7 @@ import android.media.MediaPlayer
 import com.subtitleedit.adapter.SubtitleAdapter
 import com.subtitleedit.databinding.ActivityEditorBinding
 import com.subtitleedit.util.AiTranslator
+import com.subtitleedit.util.AiProviderConfig
 import com.subtitleedit.view.WaveformTimelineView
 import com.subtitleedit.util.DraftManager
 import com.subtitleedit.util.FileUtils
@@ -1970,9 +1971,11 @@ class EditorActivity : AppCompatActivity() {
         
         // 检查 API 设置
         val settingsManager = SettingsManager.getInstance(this)
+        val provider = settingsManager.getAiProvider()
+        val providerName = AiProviderConfig.getProvider(provider).displayName
         val apiKey = settingsManager.getAiApiKey()
         if (apiKey.isEmpty()) {
-            com.subtitleedit.util.OverwritingToast.makeText(this, "请先在设置中配置 API Key", Toast.LENGTH_LONG).show()
+            com.subtitleedit.util.OverwritingToast.makeText(this, "请先在设置中配置 $providerName API Key", Toast.LENGTH_LONG).show()
             return
         }
         
@@ -1984,9 +1987,9 @@ class EditorActivity : AppCompatActivity() {
         val sourceLangText = if (sourceLanguage == "自动检测") "自动检测" else sourceLanguage
         AlertDialog.Builder(this)
             .setTitle("AI 翻译")
-            .setMessage("将使用 $model 模型翻译选中的 ${selectedEntries.size} 条字幕\n源语言：$sourceLangText\n目标语言：$targetLanguage\n\n点击「开始翻译」继续")
+            .setMessage("将使用 $providerName / $model 翻译选中的 ${selectedEntries.size} 条字幕\n源语言：$sourceLangText\n目标语言：$targetLanguage\n\n点击「开始翻译」继续")
             .setPositiveButton("开始翻译") { _, _ ->
-                startTranslation(selectedEntries, apiKey, model, sourceLanguage, targetLanguage)
+                startTranslation(selectedEntries, provider, apiKey, model, sourceLanguage, targetLanguage)
             }
             .setNegativeButton("取消", null)
             .show()
@@ -1997,6 +2000,7 @@ class EditorActivity : AppCompatActivity() {
      */
     private fun startTranslation(
         selectedEntries: List<Pair<SubtitleEntry, Int>>,
+        provider: String,
         apiKey: String,
         model: String,
         sourceLanguage: String,
@@ -2016,7 +2020,7 @@ class EditorActivity : AppCompatActivity() {
         translateCancelled = false
         isTranslating = true
         
-        val aiTranslator = AiTranslator(apiKey, model, sourceLanguage, targetLanguage)
+        val aiTranslator = AiTranslator(provider, apiKey, model, sourceLanguage, targetLanguage)
         val textsToTranslate = selectedEntries.map { it.first.text }
         
         translateJob = CoroutineScope(Dispatchers.Main).launch {

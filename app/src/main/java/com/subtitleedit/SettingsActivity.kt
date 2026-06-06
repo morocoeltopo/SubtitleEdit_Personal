@@ -29,9 +29,10 @@ class SettingsActivity : AppCompatActivity() {
 
         setupToolbar()
         setupEncodingSpinner()
-        setupWaveformCacheSection()
+        setupCacheSection()
         setupModelSettings()
         setupAiSettings()
+        setupLogSettings()
         setupPlaybackSettings()
         setupThemeSettings()
         loadSettings()
@@ -49,7 +50,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupModelSettings() {
-        binding.btnModelSettings.setOnClickListener {
+        binding.layoutModelSettings.setOnClickListener {
             startActivity(Intent(this, ModelSettingsActivity::class.java))
         }
     }
@@ -71,8 +72,14 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupAiSettings() {
-        binding.btnAiSettings.setOnClickListener {
+        binding.layoutAiSettings.setOnClickListener {
             startActivity(Intent(this, AiSettingsActivity::class.java))
+        }
+    }
+
+    private fun setupLogSettings() {
+        binding.layoutLog.setOnClickListener {
+            startActivity(Intent(this, LogActivity::class.java))
         }
     }
 
@@ -83,44 +90,37 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    // ==================== 波形/频谱图缓存设置 ====================
+    // ==================== 缓存管理 ====================
 
-    private fun setupWaveformCacheSection() {
-        binding.rgWaveformCache.setOnCheckedChangeListener { _, checkedId ->
-            val isAppCache = (checkedId == binding.rbCacheApp.id)
-            binding.btnClearWaveformCache.isEnabled    = isAppCache
-            binding.btnClearSpectrogramCache.isEnabled = isAppCache
-            refreshCacheSizeDisplay()
-
-            // 即时保存
-            val cacheLocation = if (checkedId == binding.rbCacheSource.id)
-                SettingsManager.WAVEFORM_CACHE_SOURCE
-            else
-                SettingsManager.WAVEFORM_CACHE_APP
-            settingsManager.setWaveformCacheLocation(cacheLocation)
-        }
-
-        binding.btnClearWaveformCache.setOnClickListener {
-            confirmClearWaveformCache()
-        }
-        binding.btnClearSpectrogramCache.setOnClickListener {
-            confirmClearSpectrogramCache()
+    private fun setupCacheSection() {
+        refreshTotalCacheSizeDisplay()
+        binding.layoutClearCache.setOnClickListener {
+            showClearCacheDialog()
         }
     }
 
-    private fun refreshCacheSizeDisplay() {
-        val isAppCache = binding.rgWaveformCache.checkedRadioButtonId == binding.rbCacheApp.id
-        if (isAppCache) {
-            val waveSize = calcWaveformCacheSize()
-            val specSize = calcSpectrogramCacheSize()
-            binding.tvWaveformCacheSize.text    = "波形图缓存：${formatSize(waveSize)}"
-            binding.tvSpectrogramCacheSize.text = "频谱图缓存：${formatSize(specSize)}"
-            binding.tvWaveformCacheSize.visibility    = android.view.View.VISIBLE
-            binding.tvSpectrogramCacheSize.visibility = android.view.View.VISIBLE
-        } else {
-            binding.tvWaveformCacheSize.visibility    = android.view.View.GONE
-            binding.tvSpectrogramCacheSize.visibility = android.view.View.GONE
-        }
+    private fun refreshTotalCacheSizeDisplay() {
+        val total = calcWaveformCacheSize() + calcSpectrogramCacheSize()
+        binding.tvTotalCacheSize.text = if (total > 0) formatSize(total) else ""
+    }
+
+    private fun showClearCacheDialog() {
+        val waveSize = calcWaveformCacheSize()
+        val specSize = calcSpectrogramCacheSize()
+        val options = arrayOf(
+            "波形图缓存（${formatSize(waveSize)}）",
+            "频谱图缓存（${formatSize(specSize)}）"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("清除缓存")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> confirmClearWaveformCache(waveSize)
+                    1 -> confirmClearSpectrogramCache(specSize)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun calcWaveformCacheSize(): Long {
@@ -145,8 +145,7 @@ class SettingsActivity : AppCompatActivity() {
         else                 -> "${"%.2f".format(bytes / 1024.0 / 1024.0)} MB"
     }
 
-    private fun confirmClearWaveformCache() {
-        val size = calcWaveformCacheSize()
+    private fun confirmClearWaveformCache(size: Long) {
         if (size == 0L) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "暂无波形图缓存可清除", Toast.LENGTH_SHORT).show()
             return
@@ -161,14 +160,13 @@ class SettingsActivity : AppCompatActivity() {
                     .filter { it.isFile && it.extension == "wave" }
                     .forEach { it.delete(); count++ }
                 com.subtitleedit.util.OverwritingToast.makeText(this, "已清除 $count 个波形图缓存文件", Toast.LENGTH_SHORT).show()
-                refreshCacheSizeDisplay()
+                refreshTotalCacheSizeDisplay()
             }
             .setNegativeButton("取消", null)
             .show()
     }
 
-    private fun confirmClearSpectrogramCache() {
-        val size = calcSpectrogramCacheSize()
+    private fun confirmClearSpectrogramCache(size: Long) {
         if (size == 0L) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "暂无频谱图缓存可清除", Toast.LENGTH_SHORT).show()
             return
@@ -183,7 +181,7 @@ class SettingsActivity : AppCompatActivity() {
                     .filter { it.isFile && it.extension == "png" && it.name.contains(".spec_") }
                     .forEach { it.delete(); count++ }
                 com.subtitleedit.util.OverwritingToast.makeText(this, "已清除 $count 个频谱图缓存文件", Toast.LENGTH_SHORT).show()
-                refreshCacheSizeDisplay()
+                refreshTotalCacheSizeDisplay()
             }
             .setNegativeButton("取消", null)
             .show()
@@ -196,16 +194,6 @@ class SettingsActivity : AppCompatActivity() {
         val currentEncoding = settingsManager.getDefaultEncoding()
         val encodingIndex = FileUtils.SUPPORTED_ENCODINGS.indexOfFirst { it.charset == currentEncoding }
         if (encodingIndex >= 0) binding.spinnerEncoding.setSelection(encodingIndex)
-
-        // 波形缓存位置
-        val cacheLocation = settingsManager.getWaveformCacheLocation()
-        if (cacheLocation == SettingsManager.WAVEFORM_CACHE_SOURCE) {
-            binding.rgWaveformCache.check(binding.rbCacheSource.id)
-        } else {
-            binding.rgWaveformCache.check(binding.rbCacheApp.id)   // 默认
-        }
-        // 初始化显示
-        refreshCacheSizeDisplay()
 
         // 选中字幕循环播放
         binding.switchLoopSelectedSubtitle.isChecked = settingsManager.isLoopSelectedSubtitleEnabled()

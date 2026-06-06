@@ -44,15 +44,31 @@
                     android:padding="16dp">
 
                     <TextView
+                        android:id="@+id/tvProviderTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="AI 翻译设置（硅基流动平台）"
+                        android:text="AI 翻译设置"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="@color/on_surface"
                         android:layout_marginBottom="16dp" />
 
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="平台"
+                        android:textSize="14sp"
+                        android:textColor="@color/on_surface_variant"
+                        android:layout_marginBottom="4dp" />
+
+                    <Spinner
+                        android:id="@+id/spinnerAiProvider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp" />
+
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/tilApiKey"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="API Key"
@@ -68,6 +84,7 @@
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/tilModel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="模型名称"
@@ -80,6 +97,15 @@
                             android:layout_height="wrap_content" />
 
                     </com.google.android.material.textfield.TextInputLayout>
+
+                    <TextView
+                        android:id="@+id/tvProviderHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/on_surface_variant"
+                        android:textSize="12sp"
+                        android:layout_marginTop="-8dp"
+                        android:layout_marginBottom="16dp" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"

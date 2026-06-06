@@ -12,9 +12,10 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * AI 翻译器 - 使用硅基流动平台进行翻译
+ * AI 翻译器 - 使用 OpenAI 兼容的 Chat Completions API 进行翻译
  */
 class AiTranslator(
+    private val provider: String,
     private val apiKey: String,
     private val model: String,
     private val sourceLanguage: String,
@@ -26,7 +27,8 @@ class AiTranslator(
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    private val apiUrl = "https://api.siliconflow.cn/v1/chat/completions"
+    private val providerConfig = AiProviderConfig.getProvider(provider)
+    private val apiUrl = providerConfig.apiUrl
 
     /**
      * 翻译字幕文本 - 批量翻译优化版本

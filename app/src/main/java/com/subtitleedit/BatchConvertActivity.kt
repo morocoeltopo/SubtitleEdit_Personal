@@ -13,7 +13,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.subtitleedit.databinding.ActivityBatchConvertBinding
+import com.subtitleedit.util.DirectoryDisplayPath
 import com.subtitleedit.util.FileUtils
+import com.subtitleedit.util.SubtitleOutputWriter
 import com.subtitleedit.util.SubtitleParser
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -59,9 +61,7 @@ class BatchConvertActivity : AppCompatActivity() {
             )
             // 保存用户选择的输出目录 URI
             outputDirectoryUri = uri
-            // 获取目录路径显示
-            val path = getDirectoryPathFromUri(uri) ?: uri.toString()
-            binding.tvOutputDir.text = "输出目录：$path"
+            binding.tvOutputDir.text = "输出目录：${DirectoryDisplayPath.fromUri(this, uri)}"
         }
     }
 
@@ -84,7 +84,7 @@ class BatchConvertActivity : AppCompatActivity() {
         supportActionBar?.setDisplayShowHomeEnabled(true)
         
         binding.toolbar.setNavigationOnClickListener {
-            onBackPressed()
+            finish()
         }
     }
     
@@ -113,7 +113,7 @@ class BatchConvertActivity : AppCompatActivity() {
     
     private fun setupRecyclerView() {
         adapter = ConvertFileAdapter(
-            onItemClick = { file -> },
+            onItemClick = { _ -> },
             onRemoveClick = { file ->
                 val index = convertFiles.indexOf(file)
                 if (index >= 0) {
@@ -183,132 +183,6 @@ class BatchConvertActivity : AppCompatActivity() {
         return size
     }
     
-    private fun getDirectoryPathFromUri(uri: Uri): String? {
-        return try {
-            val projection = arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    cursor.getString(cursor.getColumnIndexOrThrow(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME))
-                } else null
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-    
-    /**
-     * 获取唯一的文件名，如果文件已存在，则添加 (1), (2) 等后缀
-     */
-    private fun getUniqueFileName(directoryUri: Uri, fileName: String): String {
-        val nameWithoutExt = fileName.substringBeforeLast(".")
-        val extension = fileName.substringAfterLast(".", "")
-        val suffix = if (extension.isNotEmpty()) ".$extension" else ""
-        
-        var newFileName = fileName
-        var counter = 1
-        
-        // 检查文件是否存在
-        while (checkFileExists(directoryUri, newFileName)) {
-            newFileName = "$nameWithoutExt ($counter)$suffix"
-            counter++
-        }
-        return newFileName
-    }
-    
-    /**
-     * 检查指定目录下是否存在同名文件
-     */
-    private fun checkFileExists(directoryUri: Uri, fileName: String): Boolean {
-        return try {
-            if (directoryUri.scheme == "file") {
-                File(directoryUri.path!!, fileName).exists()
-            } else {
-                val documentFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(this, directoryUri)
-                documentFile?.findFile(fileName)?.exists() == true
-            }
-        } catch (e: Exception) {
-            false
-        }
-    }
-    
-    private fun createFileInDirectory(directoryUri: Uri, fileName: String, content: String) {
-        try {
-            // 获取不冲突的文件名
-            val uniqueFileName = getUniqueFileName(directoryUri, fileName)
-            
-            // 检查是否是 file:// URI（本地目录）
-            if (directoryUri.scheme == "file") {
-                // 使用传统 File API
-                val dir = File(directoryUri.path!!)
-                val outputFile = File(dir, uniqueFileName)
-                // 直接写入，因为 getUniqueFileName 已经确保了名字不重复
-                outputFile.writeText(content, StandardCharsets.UTF_8)
-                return
-            }
-            
-            // 尝试使用 fromTreeUri（适用于 SAF 树 URI）
-            var documentFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(this, directoryUri)
-            
-            // 如果 fromTreeUri 返回 null，尝试使用 fromSingleUri（适用于单文档 URI）
-            if (documentFile == null) {
-                documentFile = androidx.documentfile.provider.DocumentFile.fromSingleUri(this, directoryUri)
-            }
-            
-            // 如果还是 null，尝试直接使用 DocumentsContract 创建文件
-            if (documentFile == null || !documentFile.canWrite()) {
-                // 使用 DocumentsContract 直接在目录中创建文件
-                createFileUsingDocumentsContract(directoryUri, uniqueFileName, content)
-                return
-            }
-            
-            // 创建新文件（不需要先删除，因为 getUniqueFileName 已经确保了名字不重复）
-            val mimeType = getMimeTypeFromFileName(uniqueFileName)
-            val newFile = documentFile?.createFile(mimeType, uniqueFileName)
-            if (newFile != null) {
-                contentResolver.openOutputStream(newFile.uri, "wt")?.use { outputStream ->
-                    outputStream.write(content.toByteArray(StandardCharsets.UTF_8))
-                    outputStream.flush()
-                }
-            } else {
-                throw Exception("无法创建文件：$uniqueFileName")
-            }
-        } catch (e: Exception) {
-            throw e
-        }
-    }
-    
-    private fun createFileUsingDocumentsContract(directoryUri: Uri, fileName: String, content: String) {
-        try {
-            // 使用 DocumentsContract 直接在目录中创建文件
-            val newFileUri = android.provider.DocumentsContract.createDocument(
-                contentResolver,
-                directoryUri,
-                getMimeTypeFromFileName(fileName),
-                fileName
-            )
-            
-            if (newFileUri != null) {
-                contentResolver.openOutputStream(newFileUri, "wt")?.use { outputStream ->
-                    outputStream.write(content.toByteArray(StandardCharsets.UTF_8))
-                    outputStream.flush()
-                }
-            } else {
-                throw Exception("无法创建文件：$fileName")
-            }
-        } catch (e: Exception) {
-            throw e
-        }
-    }
-    
-    private fun getMimeTypeFromFileName(fileName: String): String {
-        return when {
-            fileName.endsWith(".srt", ignoreCase = true) -> "application/x-subrip"
-            fileName.endsWith(".lrc", ignoreCase = true) -> "text/plain"
-            fileName.endsWith(".txt", ignoreCase = true) -> "text/plain"
-            else -> "text/plain"
-        }
-    }
     
     private fun updateFileList() {
         if (convertFiles.isEmpty()) {
@@ -358,10 +232,9 @@ class BatchConvertActivity : AppCompatActivity() {
                 // 从 URI 获取文件名，去掉原扩展名
                 val originalName = convertFile.fileName
                 val nameWithoutExt = originalName.substringBeforeLast(".")
-                val outputFileName = "${nameWithoutExt}.${targetExtension}"
-                
+
                 // 在用户选择的目录中创建文件
-                createFileInDirectory(finalOutputUri, outputFileName, convertedContent)
+                SubtitleOutputWriter.writeText(this, finalOutputUri, nameWithoutExt, targetExtension, convertedContent)
                 successCount++
                 successFiles.add(convertFile.fileName)
             } catch (e: Exception) {
@@ -389,9 +262,8 @@ class BatchConvertActivity : AppCompatActivity() {
                 appendLine("\n失败文件:")
                 failFiles.forEach { appendLine("  - $it") }
             }
-            val outputPath = outputDirectoryUri?.let { 
-                getDirectoryPathFromUri(it) ?: it.toString() 
-            } ?: getConvertOutputDirectory().absolutePath
+            val outputPath = outputDirectoryUri?.let { DirectoryDisplayPath.fromUri(this@BatchConvertActivity, it) }
+                ?: getConvertOutputDirectory().absolutePath
             appendLine("\n输出目录：$outputPath")
         }
         
@@ -425,8 +297,7 @@ class BatchConvertActivity : AppCompatActivity() {
                 else -> "txt"
             }
             val nameWithoutExt = convertFile.fileName.substringBeforeLast(".")
-            val outName = "${nameWithoutExt}.${targetExtension}"
-            checkFileExists(finalOutputUri, outName)
+            SubtitleOutputWriter.exists(this, finalOutputUri, nameWithoutExt, targetExtension)
         }
         
         if (hasConflict) {

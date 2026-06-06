@@ -18,6 +18,7 @@ class SettingsManager private constructor(context: Context) {
         private const val PREFS_NAME = "subtitle_edit_settings"
         
         private const val KEY_DEFAULT_ENCODING = "default_encoding"
+        private const val KEY_AI_PROVIDER = "ai_provider"
         private const val KEY_AI_API_KEY = "ai_api_key"
         private const val KEY_AI_MODEL = "ai_model"
         private const val KEY_AI_SOURCE_LANGUAGE = "ai_source_language"
@@ -75,33 +76,71 @@ class SettingsManager private constructor(context: Context) {
     }
     
     /**
+     * 获取 AI 平台
+     */
+    fun getAiProvider(): String {
+        return prefs.getString(KEY_AI_PROVIDER, AiProviderConfig.SILICONFLOW) ?: AiProviderConfig.SILICONFLOW
+    }
+
+    /**
+     * 设置 AI 平台
+     */
+    fun setAiProvider(provider: String) {
+        prefs.edit().putString(KEY_AI_PROVIDER, provider).apply()
+    }
+
+    /**
      * 获取 AI API Key
      */
     fun getAiApiKey(): String {
-        return prefs.getString(KEY_AI_API_KEY, "") ?: ""
+        return getAiApiKey(getAiProvider())
     }
     
     /**
      * 设置 AI API Key
      */
     fun setAiApiKey(apiKey: String) {
-        prefs.edit().putString(KEY_AI_API_KEY, apiKey).apply()
+        setAiApiKey(getAiProvider(), apiKey)
     }
-    
+
+    fun getAiApiKey(provider: String): String {
+        return prefs.getString(providerKey(KEY_AI_API_KEY, provider), null)
+            ?: if (provider == AiProviderConfig.SILICONFLOW) prefs.getString(KEY_AI_API_KEY, "") ?: "" else ""
+    }
+
+    fun setAiApiKey(provider: String, apiKey: String) {
+        prefs.edit().putString(providerKey(KEY_AI_API_KEY, provider), apiKey).apply()
+    }
+
     /**
      * 获取 AI 模型名称
      */
     fun getAiModel(): String {
-        return prefs.getString(KEY_AI_MODEL, "deepseek-ai/DeepSeek-V3.2-Exp") ?: "deepseek-ai/DeepSeek-V3.2-Exp"
+        return getAiModel(getAiProvider())
     }
     
     /**
      * 设置 AI 模型名称
      */
     fun setAiModel(model: String) {
-        prefs.edit().putString(KEY_AI_MODEL, model).apply()
+        setAiModel(getAiProvider(), model)
     }
-    
+
+    fun getAiModel(provider: String): String {
+        val defaultModel = AiProviderConfig.getProvider(provider).defaultModel
+        val stored = prefs.getString(providerKey(KEY_AI_MODEL, provider), null)
+            ?: if (provider == AiProviderConfig.SILICONFLOW) {
+                prefs.getString(KEY_AI_MODEL, defaultModel) ?: defaultModel
+            } else {
+                defaultModel
+            }
+        return stored.ifBlank { defaultModel }
+    }
+
+    fun setAiModel(provider: String, model: String) {
+        prefs.edit().putString(providerKey(KEY_AI_MODEL, provider), model).apply()
+    }
+
     /**
      * 获取 AI 翻译源语言
      */
@@ -313,5 +352,9 @@ class SettingsManager private constructor(context: Context) {
 
     fun setThemeMode(mode: String) {
         prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    private fun providerKey(base: String, provider: String): String {
+        return "${base}_$provider"
     }
 }

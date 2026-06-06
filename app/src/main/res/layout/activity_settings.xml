@@ -35,41 +35,124 @@
                 android:id="@+id/spinnerEncoding"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp" />
-
-            <!-- AI 翻译设置 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="AI 翻译"
-                android:textSize="16sp"
-                android:textStyle="bold"
                 android:layout_marginBottom="8dp" />
 
-            <Button
-                android:id="@+id/btnAiSettings"
+            <!-- 主题设置 -->
+            <LinearLayout
+                android:id="@+id/layoutTheme"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="AI 翻译设置"
-                android:layout_marginBottom="24dp"
-                style="@style/Widget.Material3.Button.OutlinedButton" />
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="16dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground">
 
-            <!-- 模型设置 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="语音识别模型"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_theme_moon"
+                    android:layout_marginEnd="12dp"
+                    app:tint="?attr/colorOnSurface"/>
 
-            <Button
-                android:id="@+id/btnModelSettings"
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="主题"
+                    android:textSize="16sp"/>
+
+                <TextView
+                    android:id="@+id/tvThemeMode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp"
+                    android:textColor="?attr/colorPrimary"/>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutAiSettings"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="模型设置"
-                android:layout_marginBottom="24dp"
-                style="@style/Widget.Material3.Button.OutlinedButton" />
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_ai_translate"
+                    android:layout_marginEnd="12dp"
+                    app:tint="?attr/colorOnSurface"/>
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="AI 翻译设置"
+                    android:textSize="16sp"/>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutModelSettings"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_model"
+                    android:layout_marginEnd="12dp"
+                    app:tint="?attr/colorOnSurface"/>
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="语音识别模型设置"
+                    android:textSize="16sp"/>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutLog"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_document"
+                    android:layout_marginEnd="12dp"
+                    app:tint="?attr/colorOnSurface"/>
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="运行日志"
+                    android:textSize="16sp"/>
+
+            </LinearLayout>
 
             <!-- 播放行为 -->
             <TextView
@@ -116,99 +199,13 @@
 
             </LinearLayout>
 
-            <!-- 波形缓存存放位置 -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="波形图和频谱图缓存存放位置"
-                android:textStyle="bold"
-                android:paddingTop="16dp"
-                android:paddingBottom="4dp"/>
-
-            <RadioGroup
-                android:id="@+id/rgWaveformCache"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <RadioButton
-                    android:id="@+id/rbCacheApp"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="存放到软件缓存目录（默认，可一键清除）"/>
-
-                <RadioButton
-                    android:id="@+id/rbCacheSource"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="存放到音频文件同目录"/>
-            </RadioGroup>
-
-            <!-- 波形图缓存统计和操作 -->
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="8dp">
-
-                <TextView
-                    android:id="@+id/tvWaveformCacheSize"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="@color/secondary"
-                    android:textSize="12sp"
-                    android:visibility="gone"/>
-
-                <Button
-                    android:id="@+id/btnClearWaveformCache"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="清除波形缓存"
-                    android:enabled="false"
-                    android:textSize="12sp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"/>
-            </LinearLayout>
-
-            <!-- 频谱图缓存统计和操作 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="8dp">
-
-                <TextView
-                    android:id="@+id/tvSpectrogramCacheSize"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="@color/secondary"
-                    android:textSize="12sp"
-                    android:visibility="gone"/>
-
-                <Button
-                    android:id="@+id/btnClearSpectrogramCache"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="清除频谱缓存"
-                    android:enabled="false"
-                    android:textSize="12sp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"/>
-            </LinearLayout>
-
-            <!-- 主题设置 -->
-            <LinearLayout
-                android:id="@+id/layoutTheme"
+                android:id="@+id/layoutClearCache"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="4dp"
                 android:clickable="true"
                 android:focusable="true"
                 android:background="?attr/selectableItemBackground">
@@ -216,7 +213,7 @@
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"
-                    android:src="@drawable/ic_theme_moon"
+                    android:src="@drawable/ic_sweep"
                     android:layout_marginEnd="12dp"
                     app:tint="?attr/colorOnSurface"/>
 
@@ -224,11 +221,11 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="主题"
+                    android:text="清除缓存"
                     android:textSize="16sp"/>
 
                 <TextView
-                    android:id="@+id/tvThemeMode"
+                    android:id="@+id/tvTotalCacheSize"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="14sp"

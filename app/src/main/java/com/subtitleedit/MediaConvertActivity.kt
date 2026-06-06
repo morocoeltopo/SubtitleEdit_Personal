@@ -21,6 +21,7 @@ import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
 import com.subtitleedit.databinding.ActivityMediaConvertBinding
+import com.subtitleedit.util.DirectoryDisplayPath
 import com.subtitleedit.util.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -123,8 +124,7 @@ class MediaConvertActivity : AppCompatActivity() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
             outputDirectoryUri = uri
-            val path = getDirectoryPathFromUri(uri) ?: uri.toString()
-            binding.tvOutputDir.text = "输出目录：$path"
+            binding.tvOutputDir.text = "输出目录：${DirectoryDisplayPath.fromUri(this, uri)}"
         }
     }
 
@@ -314,20 +314,6 @@ class MediaConvertActivity : AppCompatActivity() {
         binding.btnShareOutput.setOnClickListener { shareOutput() }
     }
 
-    private fun getDirectoryPathFromUri(uri: Uri): String? {
-        return try {
-            val projection = arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    cursor.getString(cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME))
-                } else null
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-
     /**
      * 获取转换输出目录：Download/SubtitleEdit/Convert
      * 如果目录不存在则创建
@@ -388,14 +374,14 @@ class MediaConvertActivity : AppCompatActivity() {
                 }
 
                 // 查找并删除已存在的同名文件
-                val existingFile = documentFile?.findFile(fileName)
+                val existingFile = documentFile.findFile(fileName)
                 if (existingFile != null && existingFile.exists()) {
                     existingFile.delete()
                 }
 
                 // 创建新文件
                 val mimeType = getMimeTypeFromFileName(fileName)
-                val newFile = documentFile?.createFile(mimeType, fileName)
+                val newFile = documentFile.createFile(mimeType, fileName)
                 if (newFile != null) {
                     contentResolver.openOutputStream(newFile.uri, "wt")?.use { outputStream ->
                         FileInputStream(sourceFile).use { ins ->
@@ -617,9 +603,8 @@ class MediaConvertActivity : AppCompatActivity() {
                     
                     if (finalOutputUri != null) {
                         outputFile = tempOutFile
-                        val outputPath = outputDirectoryUri?.let { 
-                            getDirectoryPathFromUri(it) ?: it.toString() 
-                        } ?: getConvertOutputDirectory().absolutePath
+                        val outputPath = outputDirectoryUri?.let { DirectoryDisplayPath.fromUri(this@MediaConvertActivity, it) }
+                            ?: getConvertOutputDirectory().absolutePath
                         appendLog("\n✅ 转换成功！\n输出目录：$outputPath\n输出文件：$outputFileName\n文件大小：${formatSize(tempOutFile.length())}")
                         binding.btnShareOutput.visibility = View.VISIBLE
                     } else {

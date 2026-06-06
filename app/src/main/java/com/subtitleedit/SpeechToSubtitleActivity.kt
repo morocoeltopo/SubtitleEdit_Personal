@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
+import android.view.MotionEvent
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -13,7 +14,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.subtitleedit.databinding.ActivitySpeechToSubtitleBinding
@@ -21,6 +21,7 @@ import com.subtitleedit.model.SubtitleEntry
 import com.subtitleedit.util.DirectoryDisplayPath
 import com.subtitleedit.util.SettingsManager
 import com.subtitleedit.util.SubtitleParser
+import com.subtitleedit.util.SubtitleOutputWriter
 import com.subtitleedit.util.WhisperRecognizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -98,6 +99,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
         setupToolbar()
         setupSpinners()
         setupButtons()
+        setupScrollableLogs()
         loadSavedModel()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -183,6 +185,16 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
         // 取消按钮
         binding.btnCancel.setOnClickListener {
             cancelConversion()
+        }
+    }
+
+    private fun setupScrollableLogs() {
+        binding.realtimeResultScroll.setOnTouchListener { view, event ->
+            view.parent.requestDisallowInterceptTouchEvent(true)
+            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                view.parent.requestDisallowInterceptTouchEvent(false)
+            }
+            false
         }
     }
 
@@ -283,17 +295,50 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
             com.subtitleedit.util.OverwritingToast.makeText(this, "请先选择文件和模型", Toast.LENGTH_SHORT).show()
             return
         }
+        val outputDir = outputDirUri ?: run {
+            com.subtitleedit.util.OverwritingToast.makeText(this, "输出目录未设置", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val format = formatOptions[binding.spinnerOutputFormat.selectedItemPosition]
+        val baseFileName = selectedFileName.substringBeforeLast(".")
+        val extension = format.lowercase()
 
+        if (SubtitleOutputWriter.exists(this, outputDir, baseFileName, extension)) {
+            AlertDialog.Builder(this)
+                .setTitle("文件名冲突")
+                .setMessage("输出目录中已存在 $baseFileName.$extension。请选择处理方式。")
+                .setPositiveButton("覆盖") { _, _ ->
+                    startConversion(overwriteOutput = true)
+                }
+                .setNeutralButton("自动重命名") { _, _ ->
+                    startConversion(overwriteOutput = false)
+                }
+                .setNegativeButton("取消", null)
+                .show()
+            return
+        }
+
+        startConversion(overwriteOutput = false)
+    }
+
+    private fun startConversion(overwriteOutput: Boolean) {
         isCancelled = false
         realtimeResults.clear()
         conversionJob = lifecycleScope.launch {
             try {
                 isConverting = true
                 showProgress("正在准备...", 0)
-                binding.tvRealtimeResult.text = "等待识别..."
+                binding.tvRealtimeResult.text = ""
+                appendRuntimeLog("开始语音转字幕")
+                appendRuntimeLog("输入文件：$selectedFileName")
+                appendRuntimeLog("输出格式：${formatOptions[binding.spinnerOutputFormat.selectedItemPosition]}")
+                appendRuntimeLog("源语言：${languageOptions[binding.spinnerSourceLanguage.selectedItemPosition]}")
+                appendRuntimeLog("输出目录：${binding.tvOutputDir.text}")
+                appendSpeechModelConfig()
                 binding.btnStart.isEnabled = false
 
                 // 1. 复制文件到缓存
+                appendRuntimeLog("预处理：复制输入文件到缓存目录")
                 val cachedFile = withContext(Dispatchers.IO) {
                     copyUriToCache(selectedFileUri!!, selectedFileName)
                 }
@@ -302,11 +347,13 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
                     showError("复制文件失败")
                     return@launch
                 }
+                appendRuntimeLog("缓存文件：${cachedFile.name}，大小 ${formatBytes(cachedFile.length())}")
 
                 if (isCancelled) return@launch
 
                 // 2. 转换为 16kHz PCM WAV
                 showProgress("正在提取音频...", 5)
+                appendRuntimeLog("预处理：使用 FFmpeg 提取 16kHz 单声道 PCM WAV")
                 val pcmFile = withContext(Dispatchers.IO) {
                     convertToPcm(cachedFile)
                 }
@@ -315,12 +362,14 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
                     showError("音频转换失败")
                     return@launch
                 }
+                appendRuntimeLog("PCM 文件：${pcmFile.name}，大小 ${formatBytes(pcmFile.length())}")
 
                 if (isCancelled) return@launch
 
                 // 3. Whisper 识别
                 showProgress("正在识别语音...", 10)
                 val selectedLanguage = languageOptions[binding.spinnerSourceLanguage.selectedItemPosition]
+                appendRuntimeLog("识别：初始化 Whisper 模型并开始识别")
                 val recognizer = WhisperRecognizer(
                     encoderPath = encoderPath,
                     decoderPath = decoderPath,
@@ -342,9 +391,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
 
                                 // 实时显示识别结果
                                 segmentResult?.let { segment ->
-                                    val timeStr = formatTime(segment.startTime)
-                                    realtimeResults.append("[$timeStr] ${segment.text}\n\n")
-                                    binding.tvRealtimeResult.text = realtimeResults.toString()
+                                    appendRecognizedSegment(segment)
                                 }
                             }
                         },
@@ -358,6 +405,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
                 if (result.isSuccess) {
                     val segments = result.getOrNull()!!
                     showProgress("正在生成字幕...", 95)
+                    appendRuntimeLog("识别完成：共 ${segments.size} 条字幕片段")
 
                     if (segments.isEmpty()) {
                         showError("未识别到语音内容")
@@ -366,7 +414,8 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
 
                     val subtitleContent = generateSubtitle(segments)
                     showProgress("完成", 100)
-                    saveSubtitleFile(subtitleContent)
+                    appendRuntimeLog("生成字幕：${formatOptions[binding.spinnerOutputFormat.selectedItemPosition]} 格式")
+                    saveSubtitleFile(subtitleContent, overwriteOutput)
                 } else {
                     showError(result.exceptionOrNull()?.message ?: "识别失败")
                 }
@@ -477,7 +526,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
     /**
      * 保存字幕文件
      */
-    private fun saveSubtitleFile(content: String) {
+    private fun saveSubtitleFile(content: String, overwrite: Boolean) {
         val outputDir = outputDirUri ?: run {
             com.subtitleedit.util.OverwritingToast.makeText(this, "输出目录未设置", Toast.LENGTH_SHORT).show()
             return
@@ -488,46 +537,12 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
             val baseFileName = selectedFileName.substringBeforeLast(".")
             val extension = format.lowercase()
 
-            // 检查是否是 file:// URI（本地目录）
-            if (outputDir.scheme == "file") {
-                // 使用传统 File API
-                val dir = File(outputDir.path!!)
-                val fileName = getUniqueFileName(dir, baseFileName, extension)
-                val outputFile = File(dir, fileName)
-
-                outputFile.writeText(content, java.nio.charset.StandardCharsets.UTF_8)
-
-                val segmentCount = content.lines().filter { line ->
-                    line.matches(Regex("\\d+"))
-                }.size
-                com.subtitleedit.util.OverwritingToast.makeText(this, "字幕已保存到输出目录（共 $segmentCount 条）", Toast.LENGTH_LONG).show()
-                return
-            }
-
-            // 使用 DocumentFile API（content:// URI）
-            val dir = DocumentFile.fromTreeUri(this, outputDir) ?: throw Exception("无法访问输出目录")
-
-            val fileName = getUniqueFileNameForDocumentFile(dir, baseFileName, extension)
-            val mimeType = when (format) {
-                "SRT" -> "application/x-subrip"
-                "LRC" -> "text/plain"
-                "TXT" -> "text/plain"
-                else -> "text/plain"
-            }
-
-            val outputFile = dir.createFile(mimeType, fileName)
-            if (outputFile == null) {
-                throw Exception("创建文件失败")
-            }
-
-            contentResolver.openOutputStream(outputFile.uri)?.use { output ->
-                output.write(content.toByteArray(java.nio.charset.StandardCharsets.UTF_8))
-            }
+            val fileName = SubtitleOutputWriter.writeText(this, outputDir, baseFileName, extension, content, overwrite)
 
             val segmentCount = content.lines().filter { line ->
                 line.matches(Regex("\\d+"))
             }.size
-            com.subtitleedit.util.OverwritingToast.makeText(this, "字幕已保存到输出目录（共 $segmentCount 条）", Toast.LENGTH_LONG).show()
+            com.subtitleedit.util.OverwritingToast.makeText(this, "字幕已保存：$fileName（共 $segmentCount 条）", Toast.LENGTH_LONG).show()
 
         } catch (e: Exception) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "保存失败：${e.message}", Toast.LENGTH_LONG).show()
@@ -535,49 +550,23 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
     }
 
     /**
-     * 获取唯一的文件名（File API）
-     */
-    private fun getUniqueFileName(dir: File, baseName: String, extension: String): String {
-        var fileName = "$baseName.$extension"
-        var counter = 1
-
-        while (File(dir, fileName).exists()) {
-            fileName = "$baseName ($counter).$extension"
-            counter++
-        }
-
-        return fileName
-    }
-
-    /**
-     * 获取唯一的文件名（DocumentFile API）
-     */
-    private fun getUniqueFileNameForDocumentFile(dir: DocumentFile, baseName: String, extension: String): String {
-        var fileName = "$baseName.$extension"
-        var counter = 1
-
-        while (dir.findFile(fileName) != null) {
-            fileName = "$baseName ($counter).$extension"
-            counter++
-        }
-
-        return fileName
-    }
-
-    /**
      * 显示进度
      */
     private fun showProgress(status: String, progress: Int) {
         binding.layoutProgress.visibility = View.VISIBLE
+        binding.progressIndicator.visibility = View.VISIBLE
+        binding.btnCancel.visibility = View.VISIBLE
         binding.progressIndicator.progress = progress
         binding.tvProgressStatus.text = status
+        appendRuntimeLog(status)
     }
 
     /**
      * 隐藏进度
      */
     private fun hideProgress() {
-        binding.layoutProgress.visibility = View.GONE
+        binding.progressIndicator.visibility = View.GONE
+        binding.btnCancel.visibility = View.GONE
     }
 
     /**
@@ -591,15 +580,62 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * 格式化时间（毫秒转为 HH:MM:SS）
-     */
-    private fun formatTime(timeMs: Long): String {
+    private fun appendRuntimeLog(message: String) {
+        realtimeResults.append("[${formatClockTime()}] $message\n")
+        binding.tvRealtimeResult.text = realtimeResults.toString()
+        binding.realtimeResultScroll.post {
+            binding.realtimeResultScroll.fullScroll(View.FOCUS_DOWN)
+        }
+    }
+
+    private fun appendRecognizedSegment(segment: WhisperRecognizer.SubtitleSegment) {
+        realtimeResults.append("\n")
+        realtimeResults.append("[${formatSubtitleTime(segment.startTime)} --> ${formatSubtitleTime(segment.endTime)}]\n")
+        realtimeResults.append(segment.text).append("\n")
+        binding.tvRealtimeResult.text = realtimeResults.toString()
+        binding.realtimeResultScroll.post {
+            binding.realtimeResultScroll.fullScroll(View.FOCUS_DOWN)
+        }
+    }
+
+    private fun appendSpeechModelConfig() {
+        appendRuntimeLog("模型配置：")
+        appendRuntimeLog("  Encoder：${displayModelPath(encoderPath)}")
+        appendRuntimeLog("  Decoder：${displayModelPath(decoderPath)}")
+        appendRuntimeLog("  Tokens：${displayModelPath(tokensPath)}")
+        appendRuntimeLog("  Whisper 线程：${settingsManager.getSpeechWhisperThreads()}")
+        appendRuntimeLog("  VAD：${if (shouldUseVad()) "启用" else "禁用，固定分段 ${settingsManager.getSpeechFixedSegmentSeconds()} 秒"}")
+        if (shouldUseVad()) {
+            appendRuntimeLog("  VAD 模型：${if (vadModelPath.isBlank()) "内置 silero_vad.onnx" else displayModelPath(vadModelPath)}")
+            appendRuntimeLog("  VAD 阈值：${settingsManager.getVadThreshold()}，最小静音：${settingsManager.getVadMinSilenceDuration()}s，最小语音：${settingsManager.getVadMinSpeechDuration()}s，最大语音：${settingsManager.getVadMaxSpeechDuration()}s")
+        }
+        appendRuntimeLog("  热词：${if (settingsManager.isSpeechHotwordsEnabled()) "启用，权重 ${settingsManager.getSpeechHotwordsScore()}" else "未启用"}")
+    }
+
+    private fun displayModelPath(path: String): String {
+        return if (path.isBlank()) "未设置" else Uri.parse(path).lastPathSegment ?: path
+    }
+
+    private fun formatClockTime(): String {
+        return java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+            .format(java.util.Date())
+    }
+
+    private fun formatSubtitleTime(timeMs: Long): String {
         val totalSeconds = timeMs / 1000
         val hours = totalSeconds / 3600
         val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60
-        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+        val millis = timeMs % 1000
+        return String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        return when {
+            bytes < 1024L -> "$bytes B"
+            bytes < 1024L * 1024L -> String.format("%.1f KB", bytes / 1024.0)
+            else -> String.format("%.2f MB", bytes / 1024.0 / 1024.0)
+        }
     }
 
     override fun onDestroy() {

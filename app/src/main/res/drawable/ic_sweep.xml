@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Broom handle -->
+    <path
+        android:pathData="M15.1,3.1 C15.8,3.2 16.2,3.7 16,4.4 L13,14.2"
+        android:strokeColor="#FF212121"
+        android:fillColor="@android:color/transparent"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+
+    <!-- Ferrule -->
+    <path
+        android:pathData="M8.2,12.5 L14.3,13.7 C14.7,13.8 14.9,14.1 14.8,14.5 L14.6,15.7 L7.7,14.3 L7.9,13 C8,12.7 8,12.6 8.2,12.5 Z"
+        android:strokeColor="#FF212121"
+        android:fillColor="@android:color/transparent"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+
+    <!-- Brush head -->
+    <path
+        android:pathData="M7.7,14.3 L14.6,15.7 L14.8,20.1 C12.1,20.4 8.9,19.8 5.4,17.9 Z"
+        android:strokeColor="#FF212121"
+        android:fillColor="@android:color/transparent"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+
+</vector>
