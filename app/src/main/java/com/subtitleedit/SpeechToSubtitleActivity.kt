@@ -40,8 +40,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySpeechToSubtitleBinding
     private lateinit var settingsManager: SettingsManager
 
-    private var selectedFileUri: Uri? = null
-    private var selectedFileName: String = ""
+    private val selectedMediaFiles = mutableListOf<SelectedMediaFile>()
     private var encoderPath: String = ""
     private var decoderPath: String = ""
     private var tokensPath: String = ""
@@ -60,6 +59,11 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
         private const val MAX_VISIBLE_LOG_CHARS = 16_000
         private const val LOG_RENDER_INTERVAL_MS = 100L
     }
+
+    private data class SelectedMediaFile(
+        val uri: Uri,
+        val fileName: String
+    )
 
     // 语言选项
     private val languageOptions = listOf(
@@ -86,9 +90,9 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
 
     // 文件选择器
     private val filePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri?.let { handleSelectedFile(it) }
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) handleSelectedFiles(uris)
     }
 
     // 输出目录选择器
@@ -238,10 +242,17 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
     /**
      * 处理选择的音频/视频文件
      */
-    private fun handleSelectedFile(uri: Uri) {
-        selectedFileUri = uri
-        selectedFileName = getFileNameFromUri(uri)
-        binding.tvSelectedFile.text = selectedFileName
+    private fun handleSelectedFiles(uris: List<Uri>) {
+        selectedMediaFiles.clear()
+        selectedMediaFiles.addAll(uris.map { uri ->
+            SelectedMediaFile(uri, getFileNameFromUri(uri))
+        })
+        binding.tvSelectedFile.text = buildString {
+            append("已选择 ${selectedMediaFiles.size} 个文件：")
+            selectedMediaFiles.forEachIndexed { index, file ->
+                append("\n${index + 1}. ${file.fileName}")
+            }
+        }
         updateStartButtonState()
     }
 
@@ -303,7 +314,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
      * 更新开始按钮状态
      */
     private fun updateStartButtonState() {
-        binding.btnStart.isEnabled = selectedFileUri != null && encoderPath.isNotEmpty() &&
+        binding.btnStart.isEnabled = selectedMediaFiles.isNotEmpty() && encoderPath.isNotEmpty() &&
             tokensPath.isNotEmpty() &&
             (modelType == SettingsManager.ASR_MODEL_SENSEVOICE || decoderPath.isNotEmpty())
     }
@@ -312,7 +323,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
      * 开始转换
      */
     private fun startConversion() {
-        if (selectedFileUri == null || encoderPath.isEmpty() || tokensPath.isEmpty() ||
+        if (selectedMediaFiles.isEmpty() || encoderPath.isEmpty() || tokensPath.isEmpty() ||
             (modelType == SettingsManager.ASR_MODEL_WHISPER && decoderPath.isEmpty())) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "请先选择文件和模型", Toast.LENGTH_SHORT).show()
             return
@@ -326,13 +337,19 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
             return
         }
         val format = formatOptions[binding.spinnerOutputFormat.selectedItemPosition]
-        val baseFileName = selectedFileName.substringBeforeLast(".")
         val extension = format.lowercase()
 
-        if (SubtitleOutputWriter.exists(this, outputDir, baseFileName, extension)) {
+        if (selectedMediaFiles.any { file ->
+                SubtitleOutputWriter.exists(
+                    this,
+                    outputDir,
+                    file.fileName.substringBeforeLast("."),
+                    extension
+                )
+            }) {
             AlertDialog.Builder(this)
                 .setTitle("文件名冲突")
-                .setMessage("输出目录中已存在 $baseFileName.$extension。请选择处理方式。")
+                .setMessage("输出目录中已存在同名字幕文件。请选择处理方式。")
                 .setPositiveButton("覆盖") { _, _ ->
                     startConversion(overwriteOutput = true)
                 }
@@ -352,107 +369,43 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
         realtimeResults.clear()
         lastProgressLog = ""
         conversionJob = lifecycleScope.launch {
-            val taskCacheDir = File(
-                cacheDir,
-                "speech_to_subtitle_${System.currentTimeMillis()}_${System.nanoTime()}"
-            ).apply { mkdirs() }
             try {
                 isConverting = true
                 showProgress("正在准备...", 0)
                 binding.tvRealtimeResult.text = ""
                 appendRuntimeLog("开始语音转字幕")
-                appendRuntimeLog("输入文件：$selectedFileName")
+                appendRuntimeLog("待处理文件：${selectedMediaFiles.size} 个")
                 appendRuntimeLog("输出格式：${formatOptions[binding.spinnerOutputFormat.selectedItemPosition]}")
                 appendRuntimeLog("源语言：${languageOptions[binding.spinnerSourceLanguage.selectedItemPosition]}")
                 appendRuntimeLog("输出目录：${binding.tvOutputDir.text}")
                 appendSpeechModelConfig()
                 binding.btnStart.isEnabled = false
 
-                // 1. 复制文件到缓存
-                appendRuntimeLog("预处理：复制输入文件到缓存目录")
-                val cachedFile = withContext(Dispatchers.IO) {
-                    copyUriToCache(selectedFileUri!!, selectedFileName, taskCacheDir)
+                var successCount = 0
+                val failedFiles = mutableListOf<String>()
+                val writtenOutputBaseNames = mutableSetOf<String>()
+
+                for ((index, file) in selectedMediaFiles.withIndex()) {
+                    if (isCancelled) break
+
+                    val outputBaseName = file.fileName.substringBeforeLast(".").lowercase()
+                    val shouldOverwrite = overwriteOutput && writtenOutputBaseNames.add(outputBaseName)
+                    val result = convertFile(file, index + 1, selectedMediaFiles.size, shouldOverwrite)
+                    if (isCancelled) break
+
+                    result.onSuccess { successCount++ }
+                        .onFailure { error ->
+                            failedFiles.add(file.fileName)
+                            appendRuntimeLog("处理失败：${error.message ?: "未知错误"}")
+                        }
                 }
 
-                if (cachedFile == null) {
-                    showError("复制文件失败")
-                    return@launch
-                }
-                appendRuntimeLog("缓存文件：${cachedFile.name}，大小 ${formatBytes(cachedFile.length())}")
-
-                if (isCancelled) return@launch
-
-                // 2. 转换为 16kHz PCM WAV
-                showProgress("正在提取音频...", 5)
-                appendRuntimeLog("预处理：使用 FFmpeg 提取 16kHz 单声道 PCM WAV")
-                val pcmFile = withContext(Dispatchers.IO) {
-                    convertToPcm(cachedFile, taskCacheDir)
-                }
-
-                if (pcmFile == null) {
-                    showError("音频转换失败")
-                    return@launch
-                }
-                appendRuntimeLog("PCM 文件：${pcmFile.name}，大小 ${formatBytes(pcmFile.length())}")
-
-                if (isCancelled) return@launch
-
-                // 3. ASR 识别
-                showProgress("正在识别语音...", 10)
-                val selectedLanguage = languageOptions[binding.spinnerSourceLanguage.selectedItemPosition]
-                appendRuntimeLog("识别：初始化 ${if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) "SenseVoice" else "Whisper"} 模型并开始识别")
-                if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-                    appendRuntimeLog("SenseVoice 指定语言：$selectedLanguage (${senseVoiceLanguageCode(selectedLanguage)})")
-                }
-                val recognizer = WhisperRecognizer(
-                    encoderPath = encoderPath,
-                    decoderPath = decoderPath,
-                    tokensPath = tokensPath,
-                    vadModelPath = getActiveVadModelPath(),
-                    useVad = shouldUseVad(),
-                    language = selectedLanguage,
-                    contentResolver = contentResolver,
-                    context = this@SpeechToSubtitleActivity,
-                    modelType = modelType
-                )
-
-                val result = withContext(Dispatchers.IO) {
-                    recognizer.recognize(
-                        audioFile = pcmFile,
-                        progressCallback = { progress, status, segmentResult ->
-                            runOnUiThread {
-                                // 10-90% 用于识别进度
-                                showProgress(status, 10 + (progress * 0.8).toInt())
-
-                                // 实时显示识别结果
-                                segmentResult?.let { segment ->
-                                    appendRecognizedSegment(segment)
-                                }
-                            }
-                        },
-                        isCancelled = { isCancelled }
-                    )
-                }
-
-                if (isCancelled) return@launch
-
-                // 4. 生成字幕文件
-                if (result.isSuccess) {
-                    val segments = result.getOrNull()!!
-                    showProgress("正在生成字幕...", 95)
-                    appendRuntimeLog("识别完成：共 ${segments.size} 条字幕片段")
-
-                    if (segments.isEmpty()) {
-                        showError("未识别到语音内容")
-                        return@launch
-                    }
-
-                    val subtitleContent = generateSubtitle(segments)
-                    showProgress("完成", 100)
-                    appendRuntimeLog("生成字幕：${formatOptions[binding.spinnerOutputFormat.selectedItemPosition]} 格式")
-                    saveSubtitleFile(subtitleContent, overwriteOutput, segments.size)
-                } else {
-                    showError(result.exceptionOrNull()?.message ?: "识别失败")
+                if (!isCancelled) {
+                    showProgress("全部处理完成", 100)
+                    val summary = "转录完成：成功 $successCount/${selectedMediaFiles.size}" +
+                        if (failedFiles.isEmpty()) "" else "，失败 ${failedFiles.size}"
+                    appendRuntimeLog(summary)
+                    com.subtitleedit.util.OverwritingToast.makeText(this@SpeechToSubtitleActivity, summary, Toast.LENGTH_LONG).show()
                 }
 
             } catch (e: Exception) {
@@ -460,9 +413,6 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
                     showError(e.message ?: "未知错误")
                 }
             } finally {
-                withContext(NonCancellable + Dispatchers.IO) {
-                    taskCacheDir.deleteRecursively()
-                }
                 isConverting = false
                 hideProgress()
                 updateStartButtonState()
@@ -574,23 +524,101 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
     /**
      * 保存字幕文件
      */
-    private fun saveSubtitleFile(content: String, overwrite: Boolean, segmentCount: Int) {
-        val outputDir = outputDirUri ?: run {
-            com.subtitleedit.util.OverwritingToast.makeText(this, "输出目录未设置", Toast.LENGTH_SHORT).show()
-            return
-        }
+    private fun saveSubtitleFile(
+        sourceFileName: String,
+        content: String,
+        overwrite: Boolean,
+        segmentCount: Int
+    ): String {
+        val outputDir = outputDirUri ?: throw IllegalStateException("输出目录未设置")
+        val format = formatOptions[binding.spinnerOutputFormat.selectedItemPosition]
+        val baseFileName = sourceFileName.substringBeforeLast(".")
+        val extension = format.lowercase()
+        val fileName = SubtitleOutputWriter.writeText(this, outputDir, baseFileName, extension, content, overwrite)
+        com.subtitleedit.util.OverwritingToast.makeText(this, "字幕已保存：$fileName（共 $segmentCount 条）", Toast.LENGTH_LONG).show()
+        return fileName
+    }
 
-        try {
-            val format = formatOptions[binding.spinnerOutputFormat.selectedItemPosition]
-            val baseFileName = selectedFileName.substringBeforeLast(".")
-            val extension = format.lowercase()
+    private suspend fun convertFile(
+        file: SelectedMediaFile,
+        fileIndex: Int,
+        fileCount: Int,
+        overwriteOutput: Boolean
+    ): Result<Unit> {
+        val taskCacheDir = File(
+            cacheDir,
+            "speech_to_subtitle_${System.currentTimeMillis()}_${System.nanoTime()}"
+        ).apply { mkdirs() }
+        val progressPrefix = "[$fileIndex/$fileCount]"
 
-            val fileName = SubtitleOutputWriter.writeText(this, outputDir, baseFileName, extension, content, overwrite)
+        return try {
+            showProgress("$progressPrefix 正在准备...", 0)
+            appendRuntimeLog("开始处理 $progressPrefix：${file.fileName}")
+            appendRuntimeLog("预处理：复制输入文件到缓存目录")
+            val cachedFile = withContext(Dispatchers.IO) {
+                copyUriToCache(file.uri, file.fileName, taskCacheDir)
+            } ?: return Result.failure(Exception("复制文件失败"))
+            appendRuntimeLog("缓存文件：${cachedFile.name}，大小 ${formatBytes(cachedFile.length())}")
 
-            com.subtitleedit.util.OverwritingToast.makeText(this, "字幕已保存：$fileName（共 $segmentCount 条）", Toast.LENGTH_LONG).show()
+            if (isCancelled) return Result.failure(Exception("用户取消"))
 
+            showProgress("$progressPrefix 正在提取音频...", 5)
+            appendRuntimeLog("预处理：使用 FFmpeg 提取 16kHz 单声道 PCM WAV")
+            val pcmFile = withContext(Dispatchers.IO) {
+                convertToPcm(cachedFile, taskCacheDir)
+            } ?: return Result.failure(Exception("音频转换失败"))
+            appendRuntimeLog("PCM 文件：${pcmFile.name}，大小 ${formatBytes(pcmFile.length())}")
+
+            if (isCancelled) return Result.failure(Exception("用户取消"))
+
+            showProgress("$progressPrefix 正在识别语音...", 10)
+            val selectedLanguage = languageOptions[binding.spinnerSourceLanguage.selectedItemPosition]
+            appendRuntimeLog("识别：初始化 ${if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) "SenseVoice" else "Whisper"} 模型并开始识别")
+            if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
+                appendRuntimeLog("SenseVoice 指定语言：$selectedLanguage (${senseVoiceLanguageCode(selectedLanguage)})")
+            }
+            val recognizer = WhisperRecognizer(
+                encoderPath = encoderPath,
+                decoderPath = decoderPath,
+                tokensPath = tokensPath,
+                vadModelPath = getActiveVadModelPath(),
+                useVad = shouldUseVad(),
+                language = selectedLanguage,
+                contentResolver = contentResolver,
+                context = this@SpeechToSubtitleActivity,
+                modelType = modelType
+            )
+
+            val recognitionResult = withContext(Dispatchers.IO) {
+                recognizer.recognize(
+                    audioFile = pcmFile,
+                    progressCallback = { progress, status, segmentResult ->
+                        runOnUiThread {
+                            showProgress("$progressPrefix $status", 10 + (progress * 0.8).toInt())
+                            segmentResult?.let(::appendRecognizedSegment)
+                        }
+                    },
+                    isCancelled = { isCancelled }
+                )
+            }
+
+            if (isCancelled) return Result.failure(Exception("用户取消"))
+            val segments = recognitionResult.getOrElse { return Result.failure(it) }
+            if (segments.isEmpty()) return Result.failure(Exception("未识别到语音内容"))
+
+            showProgress("$progressPrefix 正在生成字幕...", 95)
+            appendRuntimeLog("识别完成：共 ${segments.size} 条字幕片段")
+            val subtitleContent = generateSubtitle(segments)
+            val outputFileName = saveSubtitleFile(file.fileName, subtitleContent, overwriteOutput, segments.size)
+            appendRuntimeLog("已保存字幕：$outputFileName")
+            showProgress("$progressPrefix 完成", 100)
+            Result.success(Unit)
         } catch (e: Exception) {
-            com.subtitleedit.util.OverwritingToast.makeText(this, "保存失败：${e.message}", Toast.LENGTH_LONG).show()
+            Result.failure(e)
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) {
+                taskCacheDir.deleteRecursively()
+            }
         }
     }
 

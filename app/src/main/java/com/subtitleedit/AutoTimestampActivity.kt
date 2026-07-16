@@ -34,21 +34,26 @@ import java.io.File
 class AutoTimestampActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAutoTimestampBinding
-    private var selectedAudioUri: Uri? = null
-    private var selectedFileName: String = ""
+    private val selectedMediaFiles = mutableListOf<SelectedMediaFile>()
     private var outputDirUri: Uri? = null
     private var generationJob: Job? = null
     private var isGenerating = false
+    private var isCancelled = false
     private lateinit var settingsManager: SettingsManager
     private val operationLog = StringBuilder()
 
     private val formatOptions = arrayOf("SRT", "LRC")
 
+    private data class SelectedMediaFile(
+        val uri: Uri,
+        val fileName: String
+    )
+
     // 音频文件选择器
     private val audioPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri?.let { handleSelectedAudio(it) }
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) handleSelectedAudios(uris)
     }
 
     // 输出目录选择器
@@ -77,8 +82,7 @@ class AutoTimestampActivity : AppCompatActivity() {
                         .setTitle("正在处理中")
                         .setMessage("自动打轴正在进行，确定要返回吗？返回后处理将被取消。")
                         .setPositiveButton("返回并取消") { _, _ ->
-                            generationJob?.cancel()
-                            isGenerating = false
+                            cancelGeneration(showToast = false)
                             isEnabled = false
                             onBackPressedDispatcher.onBackPressed()
                         }
@@ -122,6 +126,10 @@ class AutoTimestampActivity : AppCompatActivity() {
         binding.btnGenerate.setOnClickListener {
             generateTimestamps()
         }
+
+        binding.btnCancel.setOnClickListener {
+            confirmCancelGeneration()
+        }
     }
 
     private fun setupScrollableLogs() {
@@ -152,16 +160,19 @@ class AutoTimestampActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleSelectedAudio(uri: Uri) {
+    private fun handleSelectedAudios(uris: List<Uri>) {
         try {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-
-            selectedAudioUri = uri
-            selectedFileName = getFileNameFromUri(uri)
-            binding.tvAudioFile.text = selectedFileName
+            selectedMediaFiles.clear()
+            selectedMediaFiles.addAll(uris.map { uri ->
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                SelectedMediaFile(uri, getFileNameFromUri(uri))
+            })
+            binding.tvAudioFile.text = buildString {
+                append("已选择 ${selectedMediaFiles.size} 个文件：")
+                selectedMediaFiles.forEachIndexed { index, file ->
+                    append("\n${index + 1}. ${file.fileName}")
+                }
+            }
             binding.btnGenerate.isEnabled = true
 
         } catch (e: Exception) {
@@ -185,7 +196,7 @@ class AutoTimestampActivity : AppCompatActivity() {
     }
 
     private fun generateTimestamps() {
-        if (selectedAudioUri == null) return
+        if (selectedMediaFiles.isEmpty()) return
         if (!settingsManager.isVadUseBuiltInModel() && settingsManager.getVadModelPath().isBlank()) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "请先选择外部 VAD 模型，或在模型设置中勾选使用内置", Toast.LENGTH_SHORT).show()
             return
@@ -195,13 +206,19 @@ class AutoTimestampActivity : AppCompatActivity() {
             return
         }
         val format = formatOptions[binding.spinnerOutputFormat.selectedItemPosition]
-        val baseFileName = selectedFileName.substringBeforeLast(".")
         val extension = format.lowercase()
 
-        if (SubtitleOutputWriter.exists(this, outputDir, baseFileName, extension)) {
+        if (selectedMediaFiles.any { file ->
+                SubtitleOutputWriter.exists(
+                    this,
+                    outputDir,
+                    file.fileName.substringBeforeLast("."),
+                    extension
+                )
+            }) {
             AlertDialog.Builder(this)
                 .setTitle("文件名冲突")
-                .setMessage("输出目录中已存在 $baseFileName.$extension。请选择处理方式。")
+                .setMessage("输出目录中已存在同名字幕文件。请选择处理方式。")
                 .setPositiveButton("覆盖") { _, _ ->
                     generateTimestamps(overwriteOutput = true)
                 }
@@ -217,7 +234,6 @@ class AutoTimestampActivity : AppCompatActivity() {
     }
 
     private fun generateTimestamps(overwriteOutput: Boolean) {
-        val audioUri = selectedAudioUri ?: return
         val outputDir = outputDirUri ?: run {
             com.subtitleedit.util.OverwritingToast.makeText(this, "请选择输出目录", Toast.LENGTH_SHORT).show()
             return
@@ -225,108 +241,154 @@ class AutoTimestampActivity : AppCompatActivity() {
 
         binding.btnGenerate.isEnabled = false
         binding.progressBar.visibility = android.view.View.VISIBLE
+        binding.btnCancel.visibility = android.view.View.VISIBLE
         binding.tvStatus.text = "正在处理..."
         operationLog.clear()
         binding.tvPreview.text = ""
         appendOperationLog("开始自动打轴")
-        appendOperationLog("输入文件：$selectedFileName")
+        appendOperationLog("待处理文件：${selectedMediaFiles.size} 个")
         appendOperationLog("输出格式：${formatOptions[binding.spinnerOutputFormat.selectedItemPosition]}")
         appendOperationLog("输出目录：${binding.tvOutputDir.text}")
         appendOperationLog("预处理配置：FFmpeg 提取 16kHz 单声道 PCM WAV")
         appendVadConfig()
         isGenerating = true
+        isCancelled = false
 
         generationJob = lifecycleScope.launch {
-            val taskCacheDir = File(
-                cacheDir,
-                "auto_timestamp_${System.currentTimeMillis()}_${System.nanoTime()}"
-            ).apply { mkdirs() }
             try {
-                val result = withContext(Dispatchers.IO) {
-                    // 1. 复制文件到缓存
-                    runOnUiThread {
-                        binding.tvStatus.text = "正在复制文件..."
-                        appendOperationLog("预处理：复制输入文件到缓存目录")
-                    }
-                    val cachedFile = copyUriToCache(audioUri, selectedFileName, taskCacheDir)
-                    if (cachedFile == null) {
-                        throw Exception("复制文件失败")
-                    }
-                    runOnUiThread {
-                        appendOperationLog("缓存文件：${cachedFile.name}，大小 ${formatBytes(cachedFile.length())}")
-                    }
+                var successCount = 0
+                val failedFiles = mutableListOf<String>()
+                val writtenOutputBaseNames = mutableSetOf<String>()
 
-                    // 2. 转换为 16kHz PCM WAV
-                    runOnUiThread {
-                        binding.tvStatus.text = "正在提取音频..."
-                        appendOperationLog("预处理：使用 FFmpeg 转换音频")
-                    }
-                    val pcmFile = convertToPcm(cachedFile, taskCacheDir)
-                    if (pcmFile == null) {
-                        throw Exception("音频转换失败")
-                    }
-                    runOnUiThread {
-                        appendOperationLog("PCM 文件：${pcmFile.name}，大小 ${formatBytes(pcmFile.length())}")
-                    }
+                for ((index, file) in selectedMediaFiles.withIndex()) {
+                    if (isCancelled) break
 
-                    // 3. 使用 VAD 生成时间轴
-                    runOnUiThread {
-                        binding.tvStatus.text = "正在检测语音段..."
-                        appendOperationLog("VAD：开始检测语音段")
-                    }
-                    val generator = VadTimestampGenerator(this@AutoTimestampActivity)
-                    val segments = generator.generateSegments(pcmFile)
+                    val outputBaseName = file.fileName.substringBeforeLast(".").lowercase()
+                    val shouldOverwrite = overwriteOutput && writtenOutputBaseNames.add(outputBaseName)
+                    val result = generateTimestampForFile(
+                        file,
+                        index + 1,
+                        selectedMediaFiles.size,
+                        outputDir,
+                        shouldOverwrite
+                    )
+                    if (isCancelled) break
 
-                    if (segments.isEmpty()) {
-                        throw Exception("未检测到任何语音段")
-                    }
-                    runOnUiThread {
-                        appendOperationLog("VAD：检测到 ${segments.size} 个语音段")
-                        appendVadSegments(segments)
-                    }
-
-                    // 4. 生成字幕内容
-                    val format = formatOptions[binding.spinnerOutputFormat.selectedItemPosition]
-                    runOnUiThread {
-                        appendOperationLog("生成字幕：$format 格式")
-                    }
-                    val subtitleContent = generateSubtitle(segments, format)
-
-                    // 5. 保存到输出目录
-                    runOnUiThread {
-                        binding.tvStatus.text = "正在保存..."
-                        appendOperationLog("保存：写入输出目录")
-                    }
-                    saveToOutputDir(outputDir, subtitleContent, format, overwriteOutput)
-
-                    subtitleContent
+                    result.onSuccess { successCount++ }
+                        .onFailure { error ->
+                            failedFiles.add(file.fileName)
+                            appendOperationLog("处理失败：${error.message ?: "未知错误"}")
+                        }
                 }
 
-                binding.tvStatus.text = "生成完成"
-                binding.progressBar.visibility = android.view.View.GONE
-                binding.btnGenerate.isEnabled = true
-
-                // 显示预览
-                appendOperationLog("生成完成")
-                operationLog.append("\n===== 生成结果 =====\n")
-                operationLog.append(result)
-                binding.tvPreview.text = operationLog.toString()
-
-                com.subtitleedit.util.OverwritingToast.makeText(this@AutoTimestampActivity, "字幕已保存到输出目录", Toast.LENGTH_LONG).show()
+                if (!isCancelled) {
+                    val summary = "自动打轴完成：成功 $successCount/${selectedMediaFiles.size}" +
+                        if (failedFiles.isEmpty()) "" else "，失败 ${failedFiles.size}"
+                    binding.tvStatus.text = summary
+                    appendOperationLog(summary)
+                    com.subtitleedit.util.OverwritingToast.makeText(this@AutoTimestampActivity, summary, Toast.LENGTH_LONG).show()
+                }
 
             } catch (e: Exception) {
                 binding.tvStatus.text = if (isGenerating) "处理失败" else "已取消"
-                binding.progressBar.visibility = android.view.View.GONE
-                binding.btnGenerate.isEnabled = true
                 if (isGenerating) {
                     com.subtitleedit.util.OverwritingToast.makeText(this@AutoTimestampActivity, "处理失败：${e.message}", Toast.LENGTH_LONG).show()
                 }
             } finally {
-                withContext(NonCancellable + Dispatchers.IO) {
-                    taskCacheDir.deleteRecursively()
-                }
+                binding.progressBar.visibility = android.view.View.GONE
+                binding.btnCancel.visibility = android.view.View.GONE
+                binding.btnGenerate.isEnabled = true
                 isGenerating = false
                 generationJob = null
+            }
+        }
+    }
+
+    private fun confirmCancelGeneration() {
+        if (!isGenerating) return
+        AlertDialog.Builder(this)
+            .setTitle("确认取消")
+            .setMessage("自动打轴正在进行，确定要取消吗？")
+            .setPositiveButton("取消处理") { _, _ -> cancelGeneration() }
+            .setNegativeButton("继续处理", null)
+            .show()
+    }
+
+    private fun cancelGeneration(showToast: Boolean = true) {
+        if (!isGenerating) return
+        isCancelled = true
+        generationJob?.cancel()
+        isGenerating = false
+        binding.progressBar.visibility = android.view.View.GONE
+        binding.btnCancel.visibility = android.view.View.GONE
+        binding.btnGenerate.isEnabled = true
+        binding.tvStatus.text = "已取消"
+        if (showToast) {
+            com.subtitleedit.util.OverwritingToast.makeText(this, "已取消", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private suspend fun generateTimestampForFile(
+        file: SelectedMediaFile,
+        fileIndex: Int,
+        fileCount: Int,
+        outputDir: Uri,
+        overwriteOutput: Boolean
+    ): Result<Unit> {
+        val taskCacheDir = File(
+            cacheDir,
+            "auto_timestamp_${System.currentTimeMillis()}_${System.nanoTime()}"
+        ).apply { mkdirs() }
+        val progressPrefix = "[$fileIndex/$fileCount]"
+
+        return try {
+            binding.tvStatus.text = "$progressPrefix 正在复制文件..."
+            appendOperationLog("开始处理 $progressPrefix：${file.fileName}")
+            appendOperationLog("预处理：复制输入文件到缓存目录")
+            val cachedFile = withContext(Dispatchers.IO) {
+                copyUriToCache(file.uri, file.fileName, taskCacheDir)
+            } ?: return Result.failure(Exception("复制文件失败"))
+            appendOperationLog("缓存文件：${cachedFile.name}，大小 ${formatBytes(cachedFile.length())}")
+
+            if (isCancelled) return Result.failure(Exception("用户取消"))
+
+            binding.tvStatus.text = "$progressPrefix 正在提取音频..."
+            appendOperationLog("预处理：使用 FFmpeg 转换音频")
+            val pcmFile = withContext(Dispatchers.IO) {
+                convertToPcm(cachedFile, taskCacheDir)
+            } ?: return Result.failure(Exception("音频转换失败"))
+            appendOperationLog("PCM 文件：${pcmFile.name}，大小 ${formatBytes(pcmFile.length())}")
+
+            if (isCancelled) return Result.failure(Exception("用户取消"))
+
+            binding.tvStatus.text = "$progressPrefix 正在检测语音段..."
+            appendOperationLog("VAD：开始检测语音段")
+            val segments = withContext(Dispatchers.IO) {
+                VadTimestampGenerator(this@AutoTimestampActivity).generateSegments(pcmFile)
+            }
+            if (segments.isEmpty()) return Result.failure(Exception("未检测到任何语音段"))
+            appendOperationLog("VAD：检测到 ${segments.size} 个语音段")
+            appendVadSegments(segments)
+
+            val format = formatOptions[binding.spinnerOutputFormat.selectedItemPosition]
+            appendOperationLog("生成字幕：$format 格式")
+            val subtitleContent = generateSubtitle(segments, format)
+
+            binding.tvStatus.text = "$progressPrefix 正在保存..."
+            appendOperationLog("保存：写入输出目录")
+            val outputFileName = withContext(Dispatchers.IO) {
+                saveToOutputDir(outputDir, file.fileName, subtitleContent, format, overwriteOutput)
+            }
+            appendOperationLog("已保存字幕：$outputFileName")
+            operationLog.append("\n===== ${file.fileName} 生成结果 =====\n")
+            operationLog.append(subtitleContent)
+            binding.tvPreview.text = operationLog.toString()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) {
+                taskCacheDir.deleteRecursively()
             }
         }
     }
@@ -355,11 +417,17 @@ class AutoTimestampActivity : AppCompatActivity() {
     /**
      * 保存到输出目录
      */
-    private fun saveToOutputDir(dirUri: Uri, content: String, format: String, overwrite: Boolean) {
+    private fun saveToOutputDir(
+        dirUri: Uri,
+        sourceFileName: String,
+        content: String,
+        format: String,
+        overwrite: Boolean
+    ): String {
         try {
-            val baseFileName = selectedFileName.substringBeforeLast(".")
+            val baseFileName = sourceFileName.substringBeforeLast(".")
             val extension = format.lowercase()
-            SubtitleOutputWriter.writeText(this, dirUri, baseFileName, extension, content, overwrite)
+            return SubtitleOutputWriter.writeText(this, dirUri, baseFileName, extension, content, overwrite)
         } catch (e: Exception) {
             throw Exception("保存文件失败: ${e.message}")
         }
@@ -488,6 +556,7 @@ class AutoTimestampActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        isCancelled = true
         generationJob?.cancel()
         super.onDestroy()
     }
