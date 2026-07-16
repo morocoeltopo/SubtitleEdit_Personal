@@ -193,7 +193,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
 
         // 取消按钮
         binding.btnCancel.setOnClickListener {
-            cancelConversion()
+            confirmCancelConversion()
         }
     }
 
@@ -450,7 +450,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
                     val subtitleContent = generateSubtitle(segments)
                     showProgress("完成", 100)
                     appendRuntimeLog("生成字幕：${formatOptions[binding.spinnerOutputFormat.selectedItemPosition]} 格式")
-                    saveSubtitleFile(subtitleContent, overwriteOutput)
+                    saveSubtitleFile(subtitleContent, overwriteOutput, segments.size)
                 } else {
                     showError(result.exceptionOrNull()?.message ?: "识别失败")
                 }
@@ -473,6 +473,16 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
     /**
      * 取消转换
      */
+    private fun confirmCancelConversion() {
+        if (!isConverting) return
+        AlertDialog.Builder(this)
+            .setTitle("确认取消")
+            .setMessage("语音识别正在进行，确定要取消吗？")
+            .setPositiveButton("取消识别") { _, _ -> cancelConversion() }
+            .setNegativeButton("继续识别", null)
+            .show()
+    }
+
     private fun cancelConversion() {
         if (!isConverting) return
         isCancelled = true
@@ -564,7 +574,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
     /**
      * 保存字幕文件
      */
-    private fun saveSubtitleFile(content: String, overwrite: Boolean) {
+    private fun saveSubtitleFile(content: String, overwrite: Boolean, segmentCount: Int) {
         val outputDir = outputDirUri ?: run {
             com.subtitleedit.util.OverwritingToast.makeText(this, "输出目录未设置", Toast.LENGTH_SHORT).show()
             return
@@ -577,9 +587,6 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
 
             val fileName = SubtitleOutputWriter.writeText(this, outputDir, baseFileName, extension, content, overwrite)
 
-            val segmentCount = content.lines().filter { line ->
-                line.matches(Regex("\\d+"))
-            }.size
             com.subtitleedit.util.OverwritingToast.makeText(this, "字幕已保存：$fileName（共 $segmentCount 条）", Toast.LENGTH_LONG).show()
 
         } catch (e: Exception) {

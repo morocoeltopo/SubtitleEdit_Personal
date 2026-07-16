@@ -2603,7 +2603,11 @@ class EditorActivity : AppCompatActivity() {
         ffmpegChunkLoader?.release()
         ffmpegChunkLoader = null
         // 清理临时修复的 WAV 文件
-        tempFixedWavFile?.delete()
+        tempFixedWavFile?.let { file ->
+            if (file.exists() && !file.delete()) {
+                android.util.Log.w("EditorActivity", "无法删除临时修复 WAV：${file.absolutePath}")
+            }
+        }
         tempFixedWavFile = null
         if (isTranslating) {
             translateCancelled = true
@@ -2633,18 +2637,35 @@ class EditorActivity : AppCompatActivity() {
 
             android.util.Log.w("EditorActivity", "音频 start time 不为 0：$startTime，开始转换为 WAV")
 
-            // 生成临时 WAV 文件（放在 cacheDir，避免污染用户目录）
-            val wavFile = File(cacheDir, "${audioFile.nameWithoutExtension}_fixed.wav")
-            if (wavFile.exists()) wavFile.delete()
+            // 使用唯一临时文件，避免不同目录的同名音频互相覆盖。
+            val wavFile = try {
+                File.createTempFile("audio_fixed_", ".wav", cacheDir)
+            } catch (e: Exception) {
+                android.util.Log.e("EditorActivity", "创建临时 WAV 文件失败，使用原文件", e)
+                return@withContext audioFile
+            }
 
-            val cmd = "-y -i \"${audioFile.absolutePath}\" -c:a pcm_s16le -ar 44100 -ac 2 \"${wavFile.absolutePath}\""
-            val ffmpegSession = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
+            try {
+                val cmd = "-y -i \"${audioFile.absolutePath}\" -c:a pcm_s16le -ar 44100 -ac 2 \"${wavFile.absolutePath}\""
+                val ffmpegSession = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
 
-            if (ffmpegSession.returnCode.isValueSuccess) {
-                android.util.Log.d("EditorActivity", "WAV 转换成功：${wavFile.absolutePath}")
-                wavFile
-            } else {
-                android.util.Log.e("EditorActivity", "WAV 转换失败，使用原文件")
+                if (ffmpegSession.returnCode.isValueSuccess && wavFile.length() > 44L) {
+                    android.util.Log.d("EditorActivity", "WAV 转换成功：${wavFile.absolutePath}")
+                    wavFile
+                } else {
+                    android.util.Log.e("EditorActivity", "WAV 转换失败或输出为空，使用原文件")
+                    if (!wavFile.delete()) {
+                        tempFixedWavFile = wavFile
+                        android.util.Log.w("EditorActivity", "无法删除转换失败的临时 WAV：${wavFile.absolutePath}")
+                    }
+                    audioFile
+                }
+            } catch (e: Exception) {
+                if (wavFile.exists() && !wavFile.delete()) {
+                    tempFixedWavFile = wavFile
+                    android.util.Log.w("EditorActivity", "无法删除转换失败的临时 WAV：${wavFile.absolutePath}")
+                }
+                android.util.Log.e("EditorActivity", "WAV 转换异常，使用原文件", e)
                 audioFile
             }
         }
