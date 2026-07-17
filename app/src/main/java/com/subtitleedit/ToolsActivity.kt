@@ -37,6 +37,10 @@ class ToolsActivity : AppCompatActivity() {
             startActivity(Intent(this, BatchConvertActivity::class.java))
         }
 
+        binding.cardSubtitleFormat.setOnClickListener {
+            startActivity(Intent(this, SubtitleFormatSelectActivity::class.java))
+        }
+
         binding.cardMediaConvert.setOnClickListener {
             startActivity(Intent(this, MediaConvertActivity::class.java))
         }
