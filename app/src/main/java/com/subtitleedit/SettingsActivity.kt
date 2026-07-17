@@ -31,6 +31,7 @@ class SettingsActivity : AppCompatActivity() {
         setupEncodingSpinner()
         setupCacheSection()
         setupModelSettings()
+        setupTtsSettings()
         setupAiSettings()
         setupLogSettings()
         setupPlaybackSettings()
@@ -52,6 +53,12 @@ class SettingsActivity : AppCompatActivity() {
     private fun setupModelSettings() {
         binding.layoutModelSettings.setOnClickListener {
             startActivity(Intent(this, ModelSettingsActivity::class.java))
+        }
+    }
+
+    private fun setupTtsSettings() {
+        binding.layoutTtsSettings.setOnClickListener {
+            startActivity(Intent(this, TtsSettingsActivity::class.java))
         }
     }
 

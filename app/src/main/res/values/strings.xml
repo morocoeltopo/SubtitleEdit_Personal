@@ -62,4 +62,15 @@
     <string name="search_close">关闭</string>
     <string name="search_no_results">未找到匹配项</string>
     <string name="search_result_count">找到 %1$d 项，第 %2$d 项</string>
+
+    <!-- TTS -->
+    <string name="tts_settings">TTS 设置</string>
+    <string name="tts_engine">朗读引擎</string>
+    <string name="tts_engine_description">选择快速 TTS 朗读字幕时使用的系统语音合成引擎。</string>
+    <string name="quick_tts_selected_subtitles">朗读选中的字幕</string>
+    <string name="tts_language">朗读语言</string>
+    <string name="tts_language_description">指定语言可避免日语被中文语音规则朗读；自动判断对纯汉字可能不准确。</string>
+    <string name="tts_system_settings">打开系统 TTS 设置</string>
+    <string name="tts_help">帮助</string>
+    <string name="tts_help_message">推荐使用Google TTS引擎，在谷歌商店搜索Google语音识别和语音合成并下载安装，然后在设置里下载对应的语音包，随后更改朗读引擎即可</string>
 </resources>

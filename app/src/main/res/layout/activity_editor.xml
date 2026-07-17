@@ -245,6 +245,17 @@
                             android:padding="3dp"
                             android:contentDescription="快速转录选中的字幕" />
 
+                        <!-- 使用设置中选定的 TTS 引擎朗读选中字幕 -->
+                        <ImageButton
+                            android:id="@+id/btnQuickTts"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_marginStart="4dp"
+                            android:background="@drawable/bg_waveform_btn"
+                            android:contentDescription="@string/quick_tts_selected_subtitles"
+                            android:padding="3dp"
+                            android:src="@drawable/ic_tts" />
+
                         <Space
                             android:layout_width="0dp"
                             android:layout_height="1dp"

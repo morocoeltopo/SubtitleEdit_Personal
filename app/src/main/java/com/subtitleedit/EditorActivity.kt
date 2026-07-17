@@ -35,6 +35,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.media.MediaPlayer
+import android.speech.tts.TextToSpeech
 import com.subtitleedit.adapter.SubtitleAdapter
 import com.subtitleedit.adapter.TranslationPreviewAdapter
 import com.subtitleedit.adapter.TranslationPreviewItem
@@ -57,6 +58,7 @@ import com.subtitleedit.util.TimeUtils
 import java.io.File
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -125,6 +127,16 @@ class EditorActivity : AppCompatActivity() {
     // 快速转录相关
     private var transcribeJob: Job? = null
     private var transcribeCancelled = false
+
+    // 快速 TTS 相关
+    private var textToSpeech: TextToSpeech? = null
+    private var ttsReady = false
+    private var ttsInitializing = false
+    private var activeTtsEnginePreference: String? = null
+    private var activeTtsLanguagePreference: String? = null
+    private var ttsDefaultLocale: Locale? = null
+    private var pendingTtsTexts: List<String> = emptyList()
+    private var ttsGeneration = 0
     
     // 搜索相关
     private val searchEngine = SearchReplaceEngine()
@@ -2596,6 +2608,11 @@ class EditorActivity : AppCompatActivity() {
     }
     
     override fun onDestroy() {
+        ttsGeneration++
+        pendingTtsTexts = emptyList()
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
         super.onDestroy()
         // 释放 MediaPlayer
         releaseMediaPlayer()
@@ -2887,6 +2904,164 @@ class EditorActivity : AppCompatActivity() {
 
         binding.btnQuickTranscribe.setOnClickListener {
             showQuickTranscribe()
+        }
+        binding.btnQuickTranscribe.setOnLongClickListener {
+            startActivity(Intent(this, ModelSettingsActivity::class.java))
+            true
+        }
+
+        binding.btnQuickTts.setOnClickListener {
+            showQuickTts()
+        }
+        binding.btnQuickTts.setOnLongClickListener {
+            startActivity(Intent(this, TtsSettingsActivity::class.java))
+            true
+        }
+    }
+
+    /** 使用设置中选定的系统 TTS 引擎，按字幕顺序朗读当前勾选项。 */
+    private fun showQuickTts() {
+        if (!ensureListMode()) return
+        val selectedEntries = requireSelectedEntries("请先选择要朗读的字幕") ?: return
+        val texts = selectedEntries.map { it.first.text.trim() }.filter { it.isNotEmpty() }
+        if (texts.isEmpty()) {
+            showShortToast("选中的字幕没有可朗读文本")
+            return
+        }
+
+        val settings = SettingsManager.getInstance(this)
+        val requestedEngine = settings.getTtsEngine()
+        val requestedLanguage = settings.getTtsLanguage()
+        if (ttsReady && activeTtsEnginePreference == requestedEngine &&
+            activeTtsLanguagePreference == requestedLanguage
+        ) {
+            speakSubtitleTexts(texts, requestedLanguage)
+            return
+        }
+
+        pendingTtsTexts = texts
+        if (ttsInitializing && activeTtsEnginePreference == requestedEngine &&
+            activeTtsLanguagePreference == requestedLanguage
+        ) return
+        initializeTts(requestedEngine, requestedLanguage)
+    }
+
+    private fun initializeTts(requestedEngine: String, requestedLanguage: String) {
+        if (requestedEngine.isNotBlank() && !isTtsEngineInstalled(requestedEngine)) {
+            ttsGeneration++
+            pendingTtsTexts = emptyList()
+            textToSpeech?.shutdown()
+            textToSpeech = null
+            ttsReady = false
+            ttsInitializing = false
+            activeTtsEnginePreference = null
+            activeTtsLanguagePreference = null
+            showShortToast("所选 TTS 引擎已不可用，请在设置中重新选择")
+            return
+        }
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
+        ttsReady = false
+        ttsInitializing = true
+        activeTtsEnginePreference = requestedEngine
+        activeTtsLanguagePreference = requestedLanguage
+        ttsDefaultLocale = null
+        val generation = ++ttsGeneration
+
+        val listener = TextToSpeech.OnInitListener { status ->
+            // post 确保构造函数已返回且 textToSpeech 字段已经完成赋值。
+            binding.root.post {
+                if (generation != ttsGeneration || isDestroyed) return@post
+                ttsInitializing = false
+                // defaultEngine 表示系统默认引擎，并不表示构造函数指定的当前引擎。
+                if (status == TextToSpeech.SUCCESS) {
+                    ttsReady = true
+                    ttsDefaultLocale = textToSpeech?.voice?.locale
+                    val texts = pendingTtsTexts
+                    pendingTtsTexts = emptyList()
+                    speakSubtitleTexts(texts, requestedLanguage)
+                } else {
+                    pendingTtsTexts = emptyList()
+                    textToSpeech?.shutdown()
+                    textToSpeech = null
+                    activeTtsEnginePreference = null
+                    activeTtsLanguagePreference = null
+                    showShortToast(
+                        if (requestedEngine.isBlank()) "系统默认 TTS 引擎初始化失败"
+                        else "所选 TTS 引擎不可用，请在设置中重新选择"
+                    )
+                }
+            }
+        }
+
+        textToSpeech = if (requestedEngine.isBlank()) {
+            TextToSpeech(this, listener)
+        } else {
+            TextToSpeech(this, listener, requestedEngine)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun isTtsEngineInstalled(packageName: String): Boolean {
+        return packageManager.queryIntentServices(
+            Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE),
+            android.content.pm.PackageManager.MATCH_ALL
+        ).any { it.serviceInfo?.packageName == packageName }
+    }
+
+    private fun speakSubtitleTexts(texts: List<String>, languagePreference: String) {
+        val tts = textToSpeech ?: return
+        val maxLength = TextToSpeech.getMaxSpeechInputLength().coerceAtLeast(1)
+
+        tts.stop()
+        val utterancePrefix = "quick_tts_${System.currentTimeMillis()}"
+        var utteranceIndex = 0
+        texts.forEach { subtitleText ->
+            val locale = resolveTtsLocale(subtitleText, languagePreference) ?: ttsDefaultLocale
+            if (locale != null) {
+                val availability = tts.setLanguage(locale)
+                if (availability == TextToSpeech.LANG_MISSING_DATA ||
+                    availability == TextToSpeech.LANG_NOT_SUPPORTED
+                ) {
+                    showShortToast("所选 TTS 引擎不支持 ${locale.displayLanguage}，请安装对应语音包")
+                    tts.stop()
+                    return
+                }
+            }
+
+            subtitleText.chunked(maxLength).forEach { chunk ->
+                val result = tts.speak(
+                    chunk,
+                    if (utteranceIndex == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
+                    null,
+                    "${utterancePrefix}_${utteranceIndex++}"
+                )
+                if (result == TextToSpeech.ERROR) {
+                    showShortToast("TTS 朗读启动失败")
+                    tts.stop()
+                    return
+                }
+            }
+        }
+    }
+
+    private fun resolveTtsLocale(text: String, preference: String): Locale? {
+        return when (preference) {
+            SettingsManager.TTS_LANGUAGE_JAPANESE -> Locale.JAPAN
+            SettingsManager.TTS_LANGUAGE_CHINESE -> Locale.SIMPLIFIED_CHINESE
+            SettingsManager.TTS_LANGUAGE_ENGLISH -> Locale.US
+            SettingsManager.TTS_LANGUAGE_AUTO -> when {
+                // 假名可以可靠地区分日语；纯汉字在中日文之间本身具有歧义。
+                text.any { it in '\u3040'..'\u30ff' || it in '\uff66'..'\uff9f' } -> Locale.JAPAN
+                text.any { it in '\u3400'..'\u9fff' } -> {
+                    if (Locale.getDefault().language == Locale.JAPANESE.language) Locale.JAPAN
+                    else Locale.SIMPLIFIED_CHINESE
+                }
+                text.any { it in 'A'..'Z' || it in 'a'..'z' } -> Locale.US
+                else -> null
+            }
+            else -> null
         }
     }
 

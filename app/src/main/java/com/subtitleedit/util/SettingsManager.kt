@@ -44,6 +44,8 @@ class SettingsManager private constructor(context: Context) {
         private const val KEY_STT_HOTWORDS = "stt_hotwords"
         private const val KEY_STT_HOTWORDS_SCORE = "stt_hotwords_score"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_TTS_ENGINE = "tts_engine"
+        private const val KEY_TTS_LANGUAGE = "tts_language"
 
         const val WAVEFORM_CACHE_APP = "app_cache"
         const val WAVEFORM_CACHE_SOURCE = "source_dir"
@@ -54,6 +56,12 @@ class SettingsManager private constructor(context: Context) {
 
         const val ASR_MODEL_WHISPER = "whisper"
         const val ASR_MODEL_SENSEVOICE = "sensevoice"
+
+        const val TTS_LANGUAGE_SYSTEM = "system"
+        const val TTS_LANGUAGE_CHINESE = "zh-CN"
+        const val TTS_LANGUAGE_JAPANESE = "ja-JP"
+        const val TTS_LANGUAGE_ENGLISH = "en-US"
+        const val TTS_LANGUAGE_AUTO = "auto"
         
         @Volatile private var instance: SettingsManager? = null
         
@@ -405,6 +413,25 @@ class SettingsManager private constructor(context: Context) {
 
     fun setThemeMode(mode: String) {
         prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    /** 空字符串表示跟随系统默认 TTS 引擎。 */
+    fun getTtsEngine(): String = prefs.getString(KEY_TTS_ENGINE, "") ?: ""
+
+    fun setTtsEngine(packageName: String) {
+        prefs.edit().putString(KEY_TTS_ENGINE, packageName).apply()
+    }
+
+    fun getTtsLanguage(): String = prefs.getString(KEY_TTS_LANGUAGE, TTS_LANGUAGE_AUTO)
+        ?.takeIf {
+            it == TTS_LANGUAGE_SYSTEM || it == TTS_LANGUAGE_CHINESE ||
+                it == TTS_LANGUAGE_JAPANESE || it == TTS_LANGUAGE_ENGLISH ||
+                it == TTS_LANGUAGE_AUTO
+        }
+        ?: TTS_LANGUAGE_AUTO
+
+    fun setTtsLanguage(language: String) {
+        prefs.edit().putString(KEY_TTS_LANGUAGE, language).apply()
     }
 
     private fun providerKey(base: String, provider: String): String {

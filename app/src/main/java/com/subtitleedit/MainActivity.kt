@@ -68,7 +68,9 @@ class MainActivity : AppCompatActivity() {
     private val manageStorageLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        if (Environment.isExternalStorageManager()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            Environment.isExternalStorageManager()
+        ) {
             loadDirectory(getDefaultDirectory())
         } else {
             showPermissionDeniedDialog()
