@@ -57,6 +57,14 @@
                 android:textSize="16sp"
                 tools:text="版本 1.1.1" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCheckUpdate"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/check_for_updates" />
+
             <ImageButton
                 android:id="@+id/btnGithub"
                 android:layout_width="56dp"

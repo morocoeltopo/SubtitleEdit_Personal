@@ -26,6 +26,7 @@ class SettingsManager private constructor(context: Context) {
         private const val KEY_AI_TRANSLATION_PROMPT = "ai_translation_prompt"
         private const val KEY_WAVEFORM_CACHE_LOCATION = "waveform_cache_location"
         private const val KEY_LOOP_SELECTED_SUBTITLE = "loop_selected_subtitle"
+        private const val KEY_CHECK_UPDATES_ON_STARTUP = "check_updates_on_startup"
         private const val KEY_WHISPER_ENCODER_PATH = "whisper_encoder_path"
         private const val KEY_WHISPER_DECODER_PATH = "whisper_decoder_path"
         private const val KEY_WHISPER_TOKENS_PATH = "whisper_tokens_path"
@@ -418,6 +419,14 @@ class SettingsManager private constructor(context: Context) {
 
     fun setThemeMode(mode: String) {
         prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    fun shouldCheckUpdatesOnStartup(): Boolean {
+        return prefs.getBoolean(KEY_CHECK_UPDATES_ON_STARTUP, true)
+    }
+
+    fun setCheckUpdatesOnStartup(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_CHECK_UPDATES_ON_STARTUP, enabled).apply()
     }
 
     /** 空字符串表示跟随系统默认 TTS 引擎。 */

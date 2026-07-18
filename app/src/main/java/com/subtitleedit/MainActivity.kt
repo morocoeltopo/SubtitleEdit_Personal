@@ -19,10 +19,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.subtitleedit.adapter.FileListAdapter
 import com.subtitleedit.databinding.ActivityMainBinding
 import com.subtitleedit.util.FileUtils
+import com.subtitleedit.util.SettingsManager
+import com.subtitleedit.util.UpdateChecker
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -49,6 +52,9 @@ class MainActivity : AppCompatActivity() {
     private val visibleFiles = mutableListOf<File>()
     private val selectedPaths = linkedSetOf<String>()
     private var pendingFileOperation: FileOperation? = null
+    private var updateCheckStarted = false
+    private var pendingUpdate: UpdateChecker.UpdateInfo? = null
+    private var updateDialogShown = false
 
     private enum class FileOperation { COPY, MOVE }
     
@@ -94,6 +100,29 @@ class MainActivity : AppCompatActivity() {
         setupRecyclerView()
         setupButtons()
         checkPermissions()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        pendingUpdate?.let(::showPendingUpdate)
+        if (!updateCheckStarted && SettingsManager.getInstance(this).shouldCheckUpdatesOnStartup()) {
+            updateCheckStarted = true
+            lifecycleScope.launch {
+                val update = UpdateChecker.check(this@MainActivity) ?: return@launch
+                if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    showPendingUpdate(update)
+                } else {
+                    pendingUpdate = update
+                }
+            }
+        }
+    }
+
+    private fun showPendingUpdate(update: UpdateChecker.UpdateInfo) {
+        pendingUpdate = null
+        if (updateDialogShown || isFinishing || isDestroyed) return
+        updateDialogShown = true
+        UpdateChecker.showUpdateDialog(this, update)
     }
     
     private fun setupToolbar() {

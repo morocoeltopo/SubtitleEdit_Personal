@@ -35,6 +35,7 @@ class SettingsActivity : AppCompatActivity() {
         setupAiSettings()
         setupLogSettings()
         setupPlaybackSettings()
+        setupUpdateSettings()
         setupThemeSettings()
         setupAbout()
         loadSettings()
@@ -109,6 +110,12 @@ class SettingsActivity : AppCompatActivity() {
     private fun refreshTotalCacheSizeDisplay() {
         val total = calcWaveformCacheSize() + calcSpectrogramCacheSize() + calcQuickTranscribeAudioCacheSize()
         binding.tvTotalCacheSize.text = if (total > 0) formatSize(total) else ""
+    }
+
+    private fun setupUpdateSettings() {
+        binding.switchCheckUpdatesOnStartup.setOnCheckedChangeListener { _, isChecked ->
+            settingsManager.setCheckUpdatesOnStartup(isChecked)
+        }
     }
 
     private fun showClearCacheDialog() {
@@ -236,6 +243,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // 选中字幕循环播放
         binding.switchLoopSelectedSubtitle.isChecked = settingsManager.isLoopSelectedSubtitleEnabled()
+        binding.switchCheckUpdatesOnStartup.isChecked = settingsManager.shouldCheckUpdatesOnStartup()
     }
 
     private fun setupAbout() {
