@@ -46,6 +46,11 @@ class SettingsManager private constructor(context: Context) {
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_TTS_ENGINE = "tts_engine"
         private const val KEY_TTS_LANGUAGE = "tts_language"
+        private const val KEY_DEMIX_VOCALS_MODEL_URI = "demix_vocals_model_uri"
+        private const val KEY_DEMIX_DRUMS_MODEL_URI = "demix_drums_model_uri"
+        private const val KEY_DEMIX_BASS_MODEL_URI = "demix_bass_model_uri"
+        private const val KEY_DEMIX_OTHER_MODEL_URI = "demix_other_model_uri"
+        private const val KEY_DEMIX_GENERAL_MODEL_URI = "demix_general_model_uri"
 
         const val WAVEFORM_CACHE_APP = "app_cache"
         const val WAVEFORM_CACHE_SOURCE = "source_dir"
@@ -432,6 +437,21 @@ class SettingsManager private constructor(context: Context) {
 
     fun setTtsLanguage(language: String) {
         prefs.edit().putString(KEY_TTS_LANGUAGE, language).apply()
+    }
+
+    fun getDemixModelUri(stem: String): String = prefs.getString(demixModelKey(stem), "") ?: ""
+
+    fun setDemixModelUri(stem: String, uri: String) {
+        prefs.edit().putString(demixModelKey(stem), uri).apply()
+    }
+
+    private fun demixModelKey(stem: String): String = when (stem.lowercase()) {
+        "general" -> KEY_DEMIX_GENERAL_MODEL_URI
+        "vocals" -> KEY_DEMIX_VOCALS_MODEL_URI
+        "drums" -> KEY_DEMIX_DRUMS_MODEL_URI
+        "bass" -> KEY_DEMIX_BASS_MODEL_URI
+        "other" -> KEY_DEMIX_OTHER_MODEL_URI
+        else -> throw IllegalArgumentException("未知的人声分离音轨：$stem")
     }
 
     private fun providerKey(base: String, provider: String): String {

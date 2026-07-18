@@ -42,6 +42,7 @@ class SubtitleFormatPreviewAdapter(
 
     inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val check: CheckBox = view.findViewById(R.id.checkApplyFormat)
+        private val index: TextView = view.findViewById(R.id.tvFormatIndex)
         private val text: TextView = view.findViewById(R.id.tvFormatText)
         private var boundItem: SubtitleFormatPreviewItem? = null
 
@@ -56,7 +57,8 @@ class SubtitleFormatPreviewAdapter(
         fun bind(item: SubtitleFormatPreviewItem, position: Int) {
             boundItem = null
             check.isChecked = item.selected
-            text.text = "${position + 1}. ${item.text}"
+            index.text = "${position + 1}."
+            text.text = item.text
             boundItem = item
         }
     }

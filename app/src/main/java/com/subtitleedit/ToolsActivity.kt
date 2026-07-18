@@ -49,6 +49,10 @@ class ToolsActivity : AppCompatActivity() {
             startActivity(Intent(this, SpeechToSubtitleActivity::class.java))
         }
 
+        binding.cardVocalSeparation.setOnClickListener {
+            startActivity(Intent(this, VocalSeparationActivity::class.java))
+        }
+
         binding.cardAutoTimestamp.setOnClickListener {
             startActivity(Intent(this, AutoTimestampActivity::class.java))
         }

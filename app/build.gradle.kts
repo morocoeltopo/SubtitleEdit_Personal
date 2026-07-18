@@ -36,6 +36,14 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    packaging {
+        jniLibs {
+            // sherpa-onnx and the standalone demixing runtime both provide ORT/libc++.
+            // Keep a single copy in the APK; the demixing code remains isolated at API level.
+            pickFirsts += setOf("**/libonnxruntime.so", "**/libc++_shared.so")
+        }
+    }
 }
 
 dependencies {
@@ -60,6 +68,10 @@ dependencies {
 
     // OkHttp
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Standalone ONNX Runtime Java API for HTDemucs vocal separation.
+    // Match the ONNX Runtime shared library already shipped with sherpa-onnx.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
 
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
