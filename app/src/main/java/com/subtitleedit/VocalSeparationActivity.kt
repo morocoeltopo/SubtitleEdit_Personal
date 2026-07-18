@@ -39,6 +39,7 @@ class VocalSeparationActivity : AppCompatActivity() {
     private var separationJob: Job? = null
     private var isRunning = false
     private var isCancelled = false
+    private var accessWarningShown = false
     private val runtimeText = StringBuilder()
 
     private data class SelectedMediaFile(val uri: Uri, val fileName: String)
@@ -142,6 +143,7 @@ class VocalSeparationActivity : AppCompatActivity() {
     }
 
     private fun loadState() {
+        discardInaccessibleModelUris()
         updateGeneralModelUi()
         updateModelUi(VocalSeparationEngine.Stem.VOCALS, binding.tvVocalsModel)
         updateModelUi(VocalSeparationEngine.Stem.DRUMS, binding.tvDrumsModel)
@@ -474,6 +476,37 @@ class VocalSeparationActivity : AppCompatActivity() {
         }.getOrDefault(false)
     }
 
+    private fun discardInaccessibleModelUris() {
+        var discarded = false
+        val modelKeys = listOf(
+            "general",
+            VocalSeparationEngine.Stem.VOCALS.fileSuffix,
+            VocalSeparationEngine.Stem.DRUMS.fileSuffix,
+            VocalSeparationEngine.Stem.BASS.fileSuffix,
+            VocalSeparationEngine.Stem.OTHER.fileSuffix
+        )
+        modelKeys.forEach { modelKey ->
+            val uriString = settings.getDemixModelUri(modelKey)
+            if (uriString.isNotBlank() && !isSavedUriReadable(uriString)) {
+                settings.setDemixModelUri(modelKey, "")
+                discarded = true
+            }
+        }
+        if (discarded && !accessWarningShown) {
+            accessWarningShown = true
+            OverwritingToast.makeText(this, "模型访问权限已失效，请重新选择模型文件", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun isSavedUriReadable(uriString: String): Boolean = runCatching {
+        val uri = Uri.parse(uriString)
+        if (uri.scheme == "file") {
+            uri.path?.let(::File)?.isFile == true
+        } else {
+            contentResolver.openFileDescriptor(uri, "r")?.use { true } ?: false
+        }
+    }.getOrDefault(false)
+
     private fun <T> withDirectModelPath(uri: Uri, block: (path: String, size: Long?) -> T): T {
         if (uri.scheme == "file") {
             val file = File(requireNotNull(uri.path))
@@ -557,11 +590,13 @@ class VocalSeparationActivity : AppCompatActivity() {
     }
 
     private fun getFileName(uri: Uri): String {
-        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-            if (cursor.moveToFirst() && index >= 0) return cursor.getString(index)
-        }
-        return uri.lastPathSegment ?: "unknown"
+        return runCatching {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (cursor.moveToFirst() && index >= 0) return@runCatching cursor.getString(index)
+            }
+            uri.lastPathSegment ?: "unknown"
+        }.getOrElse { uri.lastPathSegment ?: "unknown" }
     }
 
     private fun formatBytes(bytes: Long): String = when {

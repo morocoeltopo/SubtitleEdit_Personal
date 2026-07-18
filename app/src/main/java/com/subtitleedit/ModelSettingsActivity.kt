@@ -12,7 +12,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.subtitleedit.databinding.ActivityModelSettingsBinding
+import com.subtitleedit.util.OverwritingToast
 import com.subtitleedit.util.SettingsManager
+import java.io.File
 
 /**
  * 模型设置页面
@@ -28,6 +30,7 @@ class ModelSettingsActivity : AppCompatActivity() {
     private var vadModelPath: String = ""
     private var modelType: String = SettingsManager.ASR_MODEL_WHISPER
     private var updatingVadThreshold = false
+    private var accessWarningShown = false
 
     private companion object {
         private const val VAD_THRESHOLD_MIN = 0.1f
@@ -235,20 +238,8 @@ class ModelSettingsActivity : AppCompatActivity() {
         modelType = settingsManager.getAsrModelType()
         loadModelPaths()
         vadModelPath = settingsManager.getVadModelPath()
+        discardInaccessibleVadModel()
         binding.cbUseBuiltInVad.isChecked = settingsManager.isVadUseBuiltInModel()
-
-        if (encoderPath.isNotEmpty()) {
-            val uri = Uri.parse(encoderPath)
-            binding.tvEncoderFile.text = getFileNameFromUri(uri)
-        }
-        if (decoderPath.isNotEmpty()) {
-            val uri = Uri.parse(decoderPath)
-            binding.tvDecoderFile.text = getFileNameFromUri(uri)
-        }
-        if (tokensPath.isNotEmpty()) {
-            val uri = Uri.parse(tokensPath)
-            binding.tvTokensFile.text = getFileNameFromUri(uri)
-        }
         updateVadModelUi()
         updateAsrModelUi()
 
@@ -419,15 +410,16 @@ class ModelSettingsActivity : AppCompatActivity() {
     }
 
     private fun getFileNameFromUri(uri: Uri): String {
-        var fileName = "未知文件"
-        val cursor = contentResolver.query(uri, null, null, null, null)
-        cursor?.use {
-            val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-            if (it.moveToFirst() && nameIndex >= 0) {
-                fileName = it.getString(nameIndex)
+        return runCatching {
+            var fileName = uri.lastPathSegment ?: "未知文件"
+            contentResolver.query(uri, null, null, null, null)?.use {
+                val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (it.moveToFirst() && nameIndex >= 0) {
+                    fileName = it.getString(nameIndex)
+                }
             }
-        }
-        return fileName
+            fileName
+        }.getOrElse { uri.lastPathSegment ?: "未知文件" }
     }
 
     private fun showModelGuide() {
@@ -499,9 +491,61 @@ class ModelSettingsActivity : AppCompatActivity() {
             decoderPath = settingsManager.getWhisperDecoderPath()
             tokensPath = settingsManager.getWhisperTokensPath()
         }
+        discardInaccessibleAsrModels()
         binding.tvEncoderFile.text = encoderPath.takeIf { it.isNotEmpty() }?.let { getFileNameFromUri(Uri.parse(it)) } ?: "未选择"
         binding.tvDecoderFile.text = decoderPath.takeIf { it.isNotEmpty() }?.let { getFileNameFromUri(Uri.parse(it)) } ?: "未选择"
         binding.tvTokensFile.text = tokensPath.takeIf { it.isNotEmpty() }?.let { getFileNameFromUri(Uri.parse(it)) } ?: "未选择"
+    }
+
+    private fun discardInaccessibleAsrModels() {
+        var discarded = false
+        if (encoderPath.isNotBlank() && !canReadSavedUri(encoderPath)) {
+            encoderPath = ""
+            if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
+                settingsManager.setSenseVoiceModelPath("")
+            } else {
+                settingsManager.setWhisperEncoderPath("")
+            }
+            discarded = true
+        }
+        if (decoderPath.isNotBlank() && !canReadSavedUri(decoderPath)) {
+            decoderPath = ""
+            settingsManager.setWhisperDecoderPath("")
+            discarded = true
+        }
+        if (tokensPath.isNotBlank() && !canReadSavedUri(tokensPath)) {
+            tokensPath = ""
+            if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
+                settingsManager.setSenseVoiceTokensPath("")
+            } else {
+                settingsManager.setWhisperTokensPath("")
+            }
+            discarded = true
+        }
+        if (discarded) showAccessExpiredMessage()
+    }
+
+    private fun discardInaccessibleVadModel() {
+        if (vadModelPath.isBlank() || canReadSavedUri(vadModelPath)) return
+        vadModelPath = ""
+        settingsManager.setVadModelPath("")
+        settingsManager.setVadUseBuiltInModel(true)
+        showAccessExpiredMessage()
+    }
+
+    private fun canReadSavedUri(uriString: String): Boolean = runCatching {
+        val uri = Uri.parse(uriString)
+        if (uri.scheme == "file") {
+            uri.path?.let(::File)?.isFile == true
+        } else {
+            contentResolver.openFileDescriptor(uri, "r")?.use { true } ?: false
+        }
+    }.getOrDefault(false)
+
+    private fun showAccessExpiredMessage() {
+        if (accessWarningShown) return
+        accessWarningShown = true
+        OverwritingToast.makeText(this, "模型访问权限已失效，请重新选择模型文件", Toast.LENGTH_LONG).show()
     }
 
     private fun updateAsrModelUi() {
