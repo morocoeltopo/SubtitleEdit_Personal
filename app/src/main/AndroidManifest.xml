@@ -63,6 +63,11 @@
             android:name=".SettingsActivity"
             android:exported="false"
             android:theme="@style/Theme.SubtitleEditforAndroid" />
+
+        <activity
+            android:name=".AboutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SubtitleEditforAndroid" />
             
         <activity
             android:name=".ToolsActivity"

@@ -5,28 +5,23 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     
-    <!-- 背景圆形 -->
+    <!-- GitHub 风格的中央圆形，外层由自适应图标背景填充原有蓝色。 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
-    
-    <!-- 字幕图标 - 类似 CC 标志 -->
+        android:pathData="M54,54m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0" />
+
+    <!-- 对齐的两个左方括号。 -->
     <path
         android:fillColor="#1976D2"
-        android:pathData="M42,42h8v4h-4v16h4v4h-8V42z"/>
-    
+        android:pathData="M42,42h10v4h-6v16h6v4H42z" />
+
     <path
         android:fillColor="#1976D2"
-        android:pathData="M58,42h8v4h-4v16h4v4h-8V42z"/>
-    
-    <!-- 时间轴线条 -->
+        android:pathData="M58,42h10v4h-6v16h6v4H58z" />
+
+    <!-- 居中的连接线和向右箭头。 -->
     <path
         android:fillColor="#1976D2"
-        android:pathData="M34,54h40v4h-40z"/>
-    
-    <!-- 播放三角形 -->
-    <path
-        android:fillColor="#1976D2"
-        android:pathData="M76,54l10,6l-10,6V54z"/>
-    
+        android:pathData="M27,52h42v4H27zM69,48l12,6l-12,6z" />
+
 </vector>

@@ -36,8 +36,8 @@ class SettingsActivity : AppCompatActivity() {
         setupLogSettings()
         setupPlaybackSettings()
         setupThemeSettings()
+        setupAbout()
         loadSettings()
-        setupGithubLink()
     }
 
     private fun setupToolbar() {
@@ -238,13 +238,9 @@ class SettingsActivity : AppCompatActivity() {
         binding.switchLoopSelectedSubtitle.isChecked = settingsManager.isLoopSelectedSubtitleEnabled()
     }
 
-    private fun setupGithubLink() {
-        binding.tvGithub.setOnClickListener {
-            val intent = android.content.Intent(
-                android.content.Intent.ACTION_VIEW,
-                android.net.Uri.parse("https://github.com/nihaina/SubtitleEditforAndroid")
-            )
-            startActivity(intent)
+    private fun setupAbout() {
+        binding.layoutAbout.setOnClickListener {
+            startActivity(Intent(this, AboutActivity::class.java))
         }
     }
 

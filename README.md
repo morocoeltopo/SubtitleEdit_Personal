@@ -1,10 +1,10 @@
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
-![API](https://img.shields.io/badge/API-33%2B-brightgreen?style=for-the-badge)
+![API](https://img.shields.io/badge/API-26%2B-brightgreen?style=for-the-badge)
 
 给音声字幕翻译的时候，不方便用电脑，在手机上改发现没有合适的软件
 
-就借助ai做了一个，功能参考了subtitle edit，目前软件的操作逻辑主要根据个人使用习惯来做
+就借助AI做了一个，功能参考了subtitle edit，目前软件的操作逻辑主要根据个人使用习惯来做
 
 目前主要完善基础的字幕编辑功能，一边做新功能一边优化操作逻辑一边修bug
 
@@ -26,13 +26,41 @@
 - **快速打轴**:可以在波形图界面快速插入字幕
 - **快速转录**:可以针对部分字幕所在时间段进行局部的语音转文字，用于对照参考
 - **快速翻译**:编辑界面对于选中字幕快速翻译和修改应用
+- **快速TTS**:朗读选中字幕，用于对照参考
 
-### 搜索功能
+### 语音转字幕
 
-- 支持搜索字幕文本和时间
-- 高亮显示搜索结果
-- 快速跳转匹配项
-- 批量替换
+- **多模型支持**:支持 Whisper、SenseVoice 等 sherpa-onnx ASR 模型
+- **多媒体输入**:支持选择音频或视频文件，可进行批量处理
+- **多格式输出**:支持生成 SRT、LRC、TXT 字幕
+- **语音分段**:支持使用 VAD 检测语音片段，也可调整相关识别参数
+- **运行控制**:显示识别进度和详细日志，支持运行中取消
+
+### 自动打轴
+
+- **语音检测**:使用 VAD 自动检测音频中的语音片段
+- **时间轴生成**:根据检测结果生成字幕时间轴
+- **格式支持**:支持将时间轴保存为多种字幕格式
+
+### 人声分离
+
+- **本地分离**:使用 HTDemucs ONNX 模型在设备本地进行音轨分离
+- **多音轨输出**:支持输出 Vocals、Drums、Bass、Other
+- **模型兼容**:支持通用四轨模型和 FT 单音轨模型
+- **智能选择**:单音轨优先使用对应 FT 模型，多音轨使用通用模型一次输出
+- **运行控制**:显示分块进度和详细日志，支持运行中取消
+
+### 音视频转换
+
+- **格式转换**:支持常用音频和视频格式之间的转换
+- **音频提取**:支持从视频文件中提取音频
+- **输出管理**:可选择输出目录并处理同名文件冲突
+
+### AI 功能
+
+- **快速翻译**:对选中的字幕进行翻译、预览和应用
+- **服务配置**:支持配置 AI 平台、API Key、模型和语言
+- **自定义提示词**:可根据字幕翻译需求调整提示词
 
 ### 文件管理
 
@@ -48,7 +76,7 @@
 ## 环境要求
 
 - JDK 17
-- Android SDK 33+
+- Android SDK 34+
 
 ### 构建步骤
 
@@ -110,3 +138,25 @@ cd SubtitleEditforAndroid
 欢迎提交 Issue 和 Pull Request！
 
 本项目采用 **[GPL-3.0 License](https://www.gnu.org/licenses/gpl-3.0.html)** 授权
+
+## 鸣谢
+
+本项目在开发过程中，部分核心功能基于以下项目实现，感谢大佬的开源！
+
+语音转字幕：[github.com/k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
+
+人声分离：[github.com/demixr/demixr-app](https://github.com/demixr/demixr-app)
+
+## 后续更新规划
+
+添加音频无损切割，无损合并
+
+模型快速下载和自动导入
+
+视频字幕的相关工作流程适配
+
+vtt字幕格式适配
+
+字幕合并
+
+......
