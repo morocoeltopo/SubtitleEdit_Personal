@@ -11,10 +11,10 @@ import android.graphics.Path
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
 import android.view.View
 import com.subtitleedit.model.SubtitleEntry
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
@@ -108,6 +108,10 @@ class WaveformTimelineView @JvmOverloads constructor(
     private var clickedOnSubtitle = false
     private var downOnSelectedSubtitle = false  // ACTION_DOWN 时是否点在已选中字幕上
     private var activePointerId = MotionEvent.INVALID_POINTER_ID
+    private var isPinching = false
+    private var pinchStartSpan = 0f
+    private var pinchStartVisibleDurationMs = 0L
+    private var pinchAnchorTimeMs = 0L
 
     // ==================== Bitmap 缓存 ====================
 
@@ -279,32 +283,6 @@ class WaveformTimelineView @JvmOverloads constructor(
     }
 
     // ==================== 手势 ====================
-
-    private val scaleGestureDetector = ScaleGestureDetector(
-        context,
-        object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                // 以缩放焦点为中心，保持焦点时间位置不变
-                val pivotMs = xToTime(detector.focusX)
-                val pivotRatio = (pivotMs - visibleStartMs).toFloat() / visibleDurationMs
-
-                val newDuration = (visibleDurationMs / detector.scaleFactor)
-                    .toLong()
-                    .coerceIn(MIN_VISIBLE_MS, MAX_VISIBLE_MS)
-
-                if (newDuration == visibleDurationMs) return true
-
-                visibleDurationMs = newDuration
-                visibleStartMs = (pivotMs - pivotRatio * visibleDurationMs)
-                    .toLong()
-                    .coerceIn(0L, max(0L, durationMs - visibleDurationMs))
-
-                invalidateCache()
-                requestVisibleChunks()
-                invalidate()
-                return true
-            }
-        })
 
     private val gestureDetector = GestureDetector(
         context,
@@ -926,7 +904,6 @@ class WaveformTimelineView @JvmOverloads constructor(
             return true
         }
 
-        scaleGestureDetector.onTouchEvent(event)
         gestureDetector.onTouchEvent(event)
 
         when (event.actionMasked) {
@@ -967,18 +944,22 @@ class WaveformTimelineView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
-                // 缩放交给 ScaleGestureDetector；视口拖动在恢复单指时重新建立基准。
+                if (event.pointerCount >= 2) beginPinch(event)
                 return true
             }
 
             MotionEvent.ACTION_POINTER_UP -> {
+                isPinching = false
                 rebaseToRemainingPointer(event, timestamping = false)
                 return true
             }
 
             MotionEvent.ACTION_MOVE -> {
-                // 两指阶段只处理缩放，避免把其中一根手指的位置当作单指拖动位置。
-                if (event.pointerCount > 1 || scaleGestureDetector.isInProgress) return true
+                if (event.pointerCount >= 2) {
+                    if (!isPinching) beginPinch(event)
+                    updatePinch(event)
+                    return true
+                }
                 val pointerIndex = event.findPointerIndex(activePointerId)
                 if (pointerIndex < 0) return true
                 val touchX = event.getX(pointerIndex)
@@ -1051,12 +1032,47 @@ class WaveformTimelineView @JvmOverloads constructor(
                 dragMode = DragMode.NONE
                 currentSubtitle = null
                 isDraggingWaveform = false
+                isPinching = false
                 activePointerId = MotionEvent.INVALID_POINTER_ID
                 invalidate()
                 return true
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    private fun beginPinch(event: MotionEvent) {
+        if (event.pointerCount < 2 || width <= 0) return
+        val dx = event.getX(1) - event.getX(0)
+        val dy = event.getY(1) - event.getY(0)
+        pinchStartSpan = hypot(dx, dy).coerceAtLeast(1f)
+        pinchStartVisibleDurationMs = visibleDurationMs
+        val focusX = (event.getX(0) + event.getX(1)) / 2f
+        pinchAnchorTimeMs = xToTime(focusX)
+        isPinching = true
+    }
+
+    private fun updatePinch(event: MotionEvent) {
+        if (!isPinching || event.pointerCount < 2 || width <= 0) return
+        val dx = event.getX(1) - event.getX(0)
+        val dy = event.getY(1) - event.getY(0)
+        val currentSpan = hypot(dx, dy).coerceAtLeast(1f)
+        val scaleFactor = currentSpan / pinchStartSpan
+        val newDuration = (pinchStartVisibleDurationMs / scaleFactor)
+            .toLong()
+            .coerceIn(MIN_VISIBLE_MS, MAX_VISIBLE_MS)
+
+        val focusX = (event.getX(0) + event.getX(1)) / 2f
+        val newStart = (pinchAnchorTimeMs - focusX / width * newDuration)
+            .toLong()
+            .coerceIn(0L, max(0L, durationMs - newDuration))
+        if (newDuration == visibleDurationMs && newStart == visibleStartMs) return
+
+        visibleDurationMs = newDuration
+        visibleStartMs = newStart
+        invalidateCache()
+        requestVisibleChunks()
+        invalidate()
     }
 
     /**
