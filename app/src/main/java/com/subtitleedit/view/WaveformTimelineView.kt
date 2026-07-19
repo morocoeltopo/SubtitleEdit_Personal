@@ -169,6 +169,7 @@ class WaveformTimelineView @JvmOverloads constructor(
     var onSelectedIndicesChangeListener: ((Set<Int>) -> Unit)? = null
     var onTimelineClickListener: ((Float) -> Unit)? = null
     var onSubtitleChangeListener: ((List<SubtitleEntry>) -> Unit)? = null
+    var onDraggedViewportPlayheadCorrection: ((positionMs: Long) -> Unit)? = null
 
     // ==================== 打轴模式 ====================
 
@@ -971,6 +972,7 @@ class WaveformTimelineView @JvmOverloads constructor(
                         .coerceIn(0L, max(0L, durationMs - visibleDurationMs))
                     if (newStart != visibleStartMs) {
                         visibleStartMs = newStart
+                        correctPlayheadAfterViewportDrag()
                         invalidateCache()
                         requestVisibleChunks()
                         invalidate()
@@ -1039,6 +1041,18 @@ class WaveformTimelineView @JvmOverloads constructor(
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    /** 用户拖动视口使播放头离开屏幕时，将播放头强制移到当前视口左边缘。 */
+    private fun correctPlayheadAfterViewportDrag() {
+        if (durationMs <= 0L) return
+        val playheadMs = (durationMs * currentPosition).toLong()
+        val visibleEndMs = visibleStartMs + visibleDurationMs
+        if (playheadMs >= visibleStartMs && playheadMs <= visibleEndMs) return
+
+        val correctedPositionMs = visibleStartMs.coerceIn(0L, durationMs)
+        currentPosition = correctedPositionMs.toFloat() / durationMs
+        onDraggedViewportPlayheadCorrection?.invoke(correctedPositionMs)
     }
 
     private fun beginPinch(event: MotionEvent) {

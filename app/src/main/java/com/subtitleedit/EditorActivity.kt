@@ -2748,6 +2748,10 @@ class EditorActivity : AppCompatActivity() {
             // 暂停时也要更新 UI，确保播放头位置正确显示
             updatePlayerUI()
         }
+
+        binding.waveformTimelineView.onDraggedViewportPlayheadCorrection = { positionMs ->
+            correctPlaybackAfterViewportDrag(positionMs)
+        }
         
         // 设置字幕变化监听器
         binding.waveformTimelineView.onSubtitleChangeListener = { updatedSubtitles ->
@@ -3447,7 +3451,35 @@ class EditorActivity : AppCompatActivity() {
             startProgressUpdate()
         }
     }
-    
+
+    /** 视口被用户拖动到播放头之外时，将真实播放位置同步到视口左边缘并保持原播放状态。 */
+    private fun correctPlaybackAfterViewportDrag(positionMs: Long) {
+        val correctedPositionMs = positionMs.coerceIn(0L, audioDuration)
+        val wasPlaying = mediaPlayer?.isPlaying == true
+        mediaPlayer?.let { player ->
+            player.seekTo(correctedPositionMs.toInt())
+        }
+        isPlaying = wasPlaying
+        audioCurrentPosition = correctedPositionMs
+        highlightSubtitleAtTime(correctedPositionMs)
+
+        // seekTo 异步完成前不要让旧的 MediaPlayer 位置覆盖刚修正的播放头。
+        val previousUserSeeking = isUserSeeking
+        isUserSeeking = true
+        updatePlayerUI()
+        isUserSeeking = previousUserSeeking
+        binding.seekBar.progress = if (audioDuration > 0L) {
+            (correctedPositionMs * 1000L / audioDuration).toInt().coerceIn(0, 1000)
+        } else {
+            0
+        }
+        if (wasPlaying) {
+            startProgressUpdate()
+        } else {
+            stopProgressUpdate()
+        }
+    }
+
     /**
      * 高亮显示指定时间的字幕
      * 注意：只高亮显示，不自动滚动，以免干扰用户编辑
