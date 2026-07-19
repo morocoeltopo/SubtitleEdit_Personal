@@ -11,8 +11,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven {
-            url = uri("https://maven.aliyun.com/repository/public")
+        maven("https://maven.aliyun.com/repository/public") {
+            content {
+                includeGroup("com.arthenica")
+            }
         }
     }
 }

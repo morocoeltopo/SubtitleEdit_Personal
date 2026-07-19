@@ -1,7 +1,53 @@
+import groovy.json.JsonSlurper
+
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
+
+fun registerApkExport(variantName: String) {
+    val taskName = "export${variantName.replaceFirstChar { it.uppercase() }}Apks"
+    val exportTask = tasks.register(taskName) {
+        doLast {
+            val outputDir = layout.buildDirectory.dir("outputs/apk/$variantName").get().asFile
+            val metadataFile = outputDir.resolve("output-metadata.json")
+            if (!metadataFile.isFile) {
+                logger.lifecycle("未找到 $variantName APK 元数据，跳过导出")
+                return@doLast
+            }
+
+            val metadata = JsonSlurper().parse(metadataFile) as Map<*, *>
+            val elements = metadata["elements"] as? List<*> ?: return@doLast
+            val versionName = android.defaultConfig.versionName ?: "unknown"
+            val exportDir = outputDir.resolve("export").apply { mkdirs() }
+
+            elements.forEach { element ->
+                val item = element as? Map<*, *> ?: return@forEach
+                val sourceName = item["outputFile"] as? String ?: return@forEach
+                val filters = item["filters"] as? List<*>
+                val architecture = filters
+                    ?.mapNotNull { (it as? Map<*, *>)?.get("value") as? String }
+                    ?.firstOrNull()
+                    ?: "universal"
+                val source = outputDir.resolve(sourceName)
+                if (source.isFile) {
+                    source.copyTo(
+                        exportDir.resolve("SubtitleEdit-release-$versionName-$architecture.apk"),
+                        overwrite = true
+                    )
+                }
+            }
+            logger.lifecycle("已导出 $variantName APK：${exportDir.absolutePath}")
+        }
+    }
+    tasks.matching {
+        it.name == "assemble${variantName.replaceFirstChar { char -> char.uppercase() }}"
+    }.configureEach {
+        finalizedBy(exportTask)
+    }
+}
+
+registerApkExport("debug")
+registerApkExport("release")
 
 android {
     namespace = "com.subtitleedit"
@@ -30,11 +76,17 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     buildFeatures {
         viewBinding = true
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = true
+        }
     }
 
     packaging {
@@ -72,10 +124,6 @@ dependencies {
     // Standalone ONNX Runtime Java API for HTDemucs vocal separation.
     // Match the ONNX Runtime shared library already shipped with sherpa-onnx.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
-
-    // Lifecycle
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.7.0")
 
     // sherpa-onnx for Whisper speech recognition
     // Kotlin API 源码已集成到 app/src/main/java/com/k2fsa/sherpa/onnx/

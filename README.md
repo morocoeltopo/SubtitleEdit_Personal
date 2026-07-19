@@ -1,3 +1,5 @@
+# SubtitleEdit for Android
+
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
 ![API](https://img.shields.io/badge/API-26%2B-brightgreen?style=for-the-badge)
@@ -82,16 +84,19 @@
 
 1. 克隆项目
 
-```bash
-git clone https://github.com/nihaina/SubtitleEditforAndroid
-cd SubtitleEditforAndroid
-```
+    ```bash
+    git clone https://github.com/nihaina/SubtitleEditforAndroid
+    cd SubtitleEditforAndroid
+    ```
 
 2. 打开项目
 3. 同步 Gradle 依赖
-4. ```
-   ./gradlew assembleDebug
-   ```
+4. 构建 Debug APK
+
+    ```bash
+    ./gradlew assembleDebug
+    ```
+
 5. 运行应用
 
 ## 使用说明
@@ -123,7 +128,7 @@ cd SubtitleEditforAndroid
 3. 长按选择"AI 翻译"
 4. 预览并应用翻译结果
 
-### 语音转字幕
+### 使用语音转字幕
 
 1. 根据帮助下载对应模型文件：[sherpa-onnx ASR 模型](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models)
 2. 将模型文件解压并放入方便查找的文件夹
