@@ -180,8 +180,9 @@ class EditorActivity : AppCompatActivity() {
     // 【新增】标记波形图是否正在后台生成中，防止状态丢失和重复生成
     private var isWaveformGenerating = false
 
-    // 选中字幕循环播放
-    private var loopSubtitleEntry: SubtitleEntry? = null  // 当前循环目标
+    // 长按字幕块选定的播放区间；只有双击启动后才限制播放行为。
+    private var limitedPlaybackEntry: SubtitleEntry? = null
+    private var isLimitedRangePlaybackActive = false
 
     // ==================== 播放进度更新相关（类成员变量，避免循环叠加）====================
     // Handler 和 Runnable 提升为类成员，配合 16ms 更新频率实现 60fps
@@ -193,23 +194,29 @@ class EditorActivity : AppCompatActivity() {
                     updatePlayerUI()
                     highlightSubtitleAtTime(audioCurrentPosition)
 
-                    // 选中字幕循环播放：检测双边界
-                    val loopTarget = loopSubtitleEntry
-                    if (loopTarget != null &&
-                        SettingsManager.getInstance(this@EditorActivity).isLoopSelectedSubtitleEnabled()
-                    ) {
+                    // 仅双击启动的限定区间播放才处理边界；普通播放完全不受影响。
+                    val rangeTarget = limitedPlaybackEntry
+                    if (isLimitedRangePlaybackActive && rangeTarget != null) {
                         when {
-                            // 超过右边界 → 跳回开始
-                            audioCurrentPosition >= loopTarget.endTime -> {
-                                player.seekTo(loopTarget.startTime.toInt())
-                                audioCurrentPosition = loopTarget.startTime
-                                updatePlayerUI()
+                            audioCurrentPosition >= rangeTarget.endTime -> {
+                                if (SettingsManager.getInstance(this@EditorActivity)
+                                        .isLoopSelectedSubtitleEnabled()
+                                ) {
+                                    player.seekTo(rangeTarget.startTime.toInt())
+                                    updatePlayerUiAtKnownPosition(rangeTarget.startTime)
+                                } else {
+                                    player.pause()
+                                    player.seekTo(rangeTarget.endTime.toInt())
+                                    isPlaying = false
+                                    isLimitedRangePlaybackActive = false
+                                    stopProgressUpdate()
+                                    updatePlayerUiAtKnownPosition(rangeTarget.endTime)
+                                    return
+                                }
                             }
-                            // 在左边界之前（用户拖进度条拖到外面）→ 跳到开始
-                            audioCurrentPosition < loopTarget.startTime -> {
-                                player.seekTo(loopTarget.startTime.toInt())
-                                audioCurrentPosition = loopTarget.startTime
-                                updatePlayerUI()
+                            audioCurrentPosition < rangeTarget.startTime -> {
+                                player.seekTo(rangeTarget.startTime.toInt())
+                                updatePlayerUiAtKnownPosition(rangeTarget.startTime)
                             }
                         }
                     }
@@ -387,11 +394,7 @@ class EditorActivity : AppCompatActivity() {
     
     private fun setupRecyclerView() {
         subtitleAdapter = SubtitleAdapter(
-            onItemClick = { _, _ ->
-                // 同步循环目标
-                val selected = subtitleAdapter.getSelectedEntries()
-                loopSubtitleEntry = if (selected.isNotEmpty()) selected.first().first else null
-            },
+            onItemClick = { _, _ -> },
             onItemLongClick = { _, position ->
                 showContextMenu(position)
             },
@@ -2752,6 +2755,24 @@ class EditorActivity : AppCompatActivity() {
         binding.waveformTimelineView.onDraggedViewportPlayheadCorrection = { positionMs ->
             correctPlaybackAfterViewportDrag(positionMs)
         }
+        binding.waveformTimelineView.onLimitedPlaybackRangeChange = { subtitleIndex ->
+            limitedPlaybackEntry = subtitleIndex?.let { subtitleEntries.getOrNull(it) }
+            isLimitedRangePlaybackActive = false
+        }
+        binding.waveformTimelineView.onLimitedPlaybackStartRequest = { subtitleIndex ->
+            startLimitedRangePlayback(subtitleIndex)
+        }
+        binding.waveformTimelineView.onLimitedPlaybackRangeOutOfView = {
+            if (isLimitedRangePlaybackActive) {
+                isLimitedRangePlaybackActive = false
+                mediaPlayer?.let { player ->
+                    if (player.isPlaying) player.pause()
+                }
+                isPlaying = false
+                stopProgressUpdate()
+                updatePlayerUI()
+            }
+        }
         
         // 设置字幕变化监听器
         binding.waveformTimelineView.onSubtitleChangeListener = { updatedSubtitles ->
@@ -2770,18 +2791,7 @@ class EditorActivity : AppCompatActivity() {
                     // 波形图选中字幕时始终将对应行定位到列表顶部，避免受当前滚动方向影响。
                     (binding.rvSubtitles.layoutManager as? LinearLayoutManager)
                         ?.scrollToPositionWithOffset(firstSelectedIndex, 0)
-                    loopSubtitleEntry = subtitleEntries[firstSelectedIndex]
-
-                    // 若循环模式开启，且播放头不在字幕区间内，则跳到字幕起始时间
-                    val target = subtitleEntries[firstSelectedIndex]
-                    if (SettingsManager.getInstance(this).isLoopSelectedSubtitleEnabled()) {
-                        if (audioCurrentPosition < target.startTime || audioCurrentPosition >= target.endTime) {
-                            seekTo(target.startTime)
-                        }
-                    }
                 }
-            } else {
-                loopSubtitleEntry = null
             }
         }
         
@@ -3413,6 +3423,8 @@ class EditorActivity : AppCompatActivity() {
                 // 暂停时停止进度更新
                 stopProgressUpdate()
             } else {
+                // 播放按钮代表普通播放，不继承双击启动的限定区间状态。
+                isLimitedRangePlaybackActive = false
                 player.start()
                 isPlaying = true
                 // 开始定时更新 UI
@@ -3426,16 +3438,9 @@ class EditorActivity : AppCompatActivity() {
      * 跳转到指定时间
      */
     private fun seekTo(timeMs: Long) {
-        // 若循环模式开启且有选中字幕，将目标时间钳制在字幕区间内
-        val loopTarget = loopSubtitleEntry
-        val clampedTime = if (
-            loopTarget != null &&
-            SettingsManager.getInstance(this).isLoopSelectedSubtitleEnabled()
-        ) {
-            timeMs.coerceIn(loopTarget.startTime, loopTarget.endTime - 1)
-        } else {
-            timeMs.coerceIn(0L, audioDuration)
-        }
+        // 普通点击/进度条跳转不属于限定区间播放。
+        isLimitedRangePlaybackActive = false
+        val clampedTime = timeMs.coerceIn(0L, audioDuration)
 
         mediaPlayer?.seekTo(clampedTime.toInt())
         audioCurrentPosition = clampedTime
@@ -3456,27 +3461,41 @@ class EditorActivity : AppCompatActivity() {
     private fun correctPlaybackAfterViewportDrag(positionMs: Long) {
         val correctedPositionMs = positionMs.coerceIn(0L, audioDuration)
         val wasPlaying = mediaPlayer?.isPlaying == true
-        mediaPlayer?.let { player ->
-            player.seekTo(correctedPositionMs.toInt())
-        }
+        mediaPlayer?.seekTo(correctedPositionMs.toInt())
         isPlaying = wasPlaying
-        audioCurrentPosition = correctedPositionMs
-        highlightSubtitleAtTime(correctedPositionMs)
+        updatePlayerUiAtKnownPosition(correctedPositionMs)
+        if (wasPlaying) {
+            startProgressUpdate()
+        } else {
+            stopProgressUpdate()
+        }
+    }
 
-        // seekTo 异步完成前不要让旧的 MediaPlayer 位置覆盖刚修正的播放头。
+    private fun startLimitedRangePlayback(subtitleIndex: Int) {
+        val target = subtitleEntries.getOrNull(subtitleIndex) ?: return
+        val player = mediaPlayer ?: return
+        limitedPlaybackEntry = target
+        isLimitedRangePlaybackActive = true
+        player.seekTo(target.startTime.toInt())
+        if (!player.isPlaying) player.start()
+        isPlaying = true
+        updatePlayerUiAtKnownPosition(target.startTime)
+        startProgressUpdate()
+    }
+
+    /** 刷新到已知的 seek 目标，避免异步 seek 完成前读取并显示旧位置。 */
+    private fun updatePlayerUiAtKnownPosition(positionMs: Long) {
+        val clampedPositionMs = positionMs.coerceIn(0L, audioDuration)
+        audioCurrentPosition = clampedPositionMs
+        highlightSubtitleAtTime(clampedPositionMs)
         val previousUserSeeking = isUserSeeking
         isUserSeeking = true
         updatePlayerUI()
         isUserSeeking = previousUserSeeking
         binding.seekBar.progress = if (audioDuration > 0L) {
-            (correctedPositionMs * 1000L / audioDuration).toInt().coerceIn(0, 1000)
+            (clampedPositionMs * 1000L / audioDuration).toInt().coerceIn(0, 1000)
         } else {
             0
-        }
-        if (wasPlaying) {
-            startProgressUpdate()
-        } else {
-            stopProgressUpdate()
         }
     }
 

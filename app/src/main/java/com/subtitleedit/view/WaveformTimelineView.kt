@@ -105,13 +105,13 @@ class WaveformTimelineView @JvmOverloads constructor(
     private var dragStartEndTime = 0L
     private var isDraggingWaveform = false
     private var dragStartVisibleStartMs = 0L
-    private var clickedOnSubtitle = false
     private var downOnSelectedSubtitle = false  // ACTION_DOWN 时是否点在已选中字幕上
     private var activePointerId = MotionEvent.INVALID_POINTER_ID
     private var isPinching = false
     private var pinchStartSpan = 0f
     private var pinchStartVisibleDurationMs = 0L
     private var pinchAnchorTimeMs = 0L
+    private var suppressTapSelection = false
 
     // ==================== Bitmap 缓存 ====================
 
@@ -131,6 +131,7 @@ class WaveformTimelineView @JvmOverloads constructor(
     // ==================== 选中 ====================
 
     private var selectedIndices: Set<Int> = emptySet()
+    private var limitedPlaybackIndex: Int? = null
 
     // ==================== 振幅缩放 ====================
     /** 垂直振幅缩放倍数，默认 1.0，范围 0.2 ~ 4.0 */
@@ -170,6 +171,9 @@ class WaveformTimelineView @JvmOverloads constructor(
     var onTimelineClickListener: ((Float) -> Unit)? = null
     var onSubtitleChangeListener: ((List<SubtitleEntry>) -> Unit)? = null
     var onDraggedViewportPlayheadCorrection: ((positionMs: Long) -> Unit)? = null
+    var onLimitedPlaybackRangeChange: ((subtitleIndex: Int?) -> Unit)? = null
+    var onLimitedPlaybackStartRequest: ((subtitleIndex: Int) -> Unit)? = null
+    var onLimitedPlaybackRangeOutOfView: (() -> Unit)? = null
 
     // ==================== 打轴模式 ====================
 
@@ -266,6 +270,16 @@ class WaveformTimelineView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         isAntiAlias = false
     }
+    private val limitedPlaybackPaint = Paint().apply {
+        color = Color.argb(72, 244, 67, 54)
+        style = Paint.Style.FILL
+    }
+    private val limitedPlaybackBorderPaint = Paint().apply {
+        color = Color.argb(220, 244, 67, 54)
+        strokeWidth = 2f
+        style = Paint.Style.STROKE
+        isAntiAlias = false
+    }
 
     // ==================== 字幕边界虚线画笔 ====================
     private val subtitleEdgePaint = Paint().apply {
@@ -288,13 +302,38 @@ class WaveformTimelineView @JvmOverloads constructor(
     private val gestureDetector = GestureDetector(
         context,
         object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                if (!clickedOnSubtitle) {
+                if (suppressTapSelection) {
+                    suppressTapSelection = false
+                    return true
+                }
+                val subtitleIndex = findSubtitleIndex(e.x, e.y)
+                if (subtitleIndex >= 0) {
+                    if (subtitleIndex in selectedIndices) clearSelection() else selectSubtitle(subtitleIndex)
+                } else {
+                    if (isInSubtitleArea(e.y)) clearSelection()
                     val t = xToTime(e.x)
                     onTimelineClickListener?.invoke(t.toFloat() / durationMs)
                 }
-                clickedOnSubtitle = false
                 return true
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                val subtitleIndex = findSubtitleIndex(e.x, e.y)
+                if (subtitleIndex >= 0 && subtitleIndex == limitedPlaybackIndex) {
+                    onLimitedPlaybackStartRequest?.invoke(subtitleIndex)
+                }
+                return true
+            }
+
+            override fun onLongPress(e: MotionEvent) {
+                val subtitleIndex = findSubtitleIndex(e.x, e.y)
+                if (subtitleIndex < 0) return
+                limitedPlaybackIndex = if (limitedPlaybackIndex == subtitleIndex) null else subtitleIndex
+                onLimitedPlaybackRangeChange?.invoke(limitedPlaybackIndex)
+                invalidate()
             }
         })
 
@@ -454,6 +493,7 @@ class WaveformTimelineView @JvmOverloads constructor(
         if (isTimestampingMode) {
             drawTimestampPreview(canvas, rulerH, waveH, subH)
         }
+        drawLimitedPlaybackRange(canvas, rulerH, waveH, subH)
         drawPlayhead(canvas, h)
     }
 
@@ -831,6 +871,18 @@ class WaveformTimelineView @JvmOverloads constructor(
         canvas.drawRect(rect, timestampPreviewBorderPaint)
     }
 
+    private fun drawLimitedPlaybackRange(canvas: Canvas, rulerH: Float, waveH: Float, subH: Float) {
+        val index = limitedPlaybackIndex ?: return
+        val subtitle = subtitles.getOrNull(index) ?: return
+        val left = timeToXUnclamped(subtitle.startTime)
+        val right = timeToXUnclamped(subtitle.endTime)
+        if (right <= 0f || left >= width.toFloat()) return
+
+        val rect = RectF(left, rulerH, right, rulerH + waveH + subH)
+        canvas.drawRect(rect, limitedPlaybackPaint)
+        canvas.drawRect(rect, limitedPlaybackBorderPaint)
+    }
+
     /** O(log n) 二分裁剪文本 */
     private fun clipText(text: String, maxWidth: Float): String {
         if (maxWidth <= 0f) return ""
@@ -911,12 +963,11 @@ class WaveformTimelineView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN -> {
                 activePointerId = event.getPointerId(0)
                 dragStartX = event.x
-                clickedOnSubtitle = false
+                suppressTapSelection = false
 
                 if (isInSubtitleArea(event.y)) {
                     val sub = findSubtitle(event.x)
                     if (sub != null) {
-                        clickedOnSubtitle = true
                         currentSubtitle = sub
                         val idx = subtitles.indexOf(sub)
                         if (idx in selectedIndices) {
@@ -927,12 +978,11 @@ class WaveformTimelineView @JvmOverloads constructor(
                             dragStartEndTime = sub.endTime
                         } else {
                             downOnSelectedSubtitle = false
-                            selectSubtitle(idx)
                             dragMode = DragMode.NONE
                         }
                     } else {
                         downOnSelectedSubtitle = false
-                        clearSelection(); currentSubtitle = null
+                        currentSubtitle = null
                     }
                     isDraggingWaveform = false
                 } else {
@@ -945,6 +995,7 @@ class WaveformTimelineView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
+                suppressTapSelection = true
                 if (event.pointerCount >= 2) beginPinch(event)
                 return true
             }
@@ -973,6 +1024,7 @@ class WaveformTimelineView @JvmOverloads constructor(
                     if (newStart != visibleStartMs) {
                         visibleStartMs = newStart
                         correctPlayheadAfterViewportDrag()
+                        notifyIfLimitedPlaybackRangeOutOfView()
                         invalidateCache()
                         requestVisibleChunks()
                         invalidate()
@@ -984,6 +1036,7 @@ class WaveformTimelineView @JvmOverloads constructor(
                 if (downOnSelectedSubtitle && dragMode == DragMode.NONE && currentSubtitle != null) {
                     if (Math.abs(dx) > 8f) {
                         dragMode = detectDragMode(dragStartX, currentSubtitle!!)
+                        suppressTapSelection = true
                     } else {
                         return true  // 位移不够，还不是拖拽
                     }
@@ -1018,17 +1071,7 @@ class WaveformTimelineView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                val pointerIndex = event.findPointerIndex(activePointerId)
-                val touchX = if (pointerIndex >= 0) event.getX(pointerIndex) else event.x
-                val dx = touchX - dragStartX
-
-                if (downOnSelectedSubtitle && dragMode == DragMode.NONE && Math.abs(dx) < 10f) {
-                    // 点在已选中字幕上，且没有拖动 → 取消选中
-                    clearSelection()
-                    currentSubtitle = null
-                } else {
-                    if (dragMode != DragMode.NONE) onSubtitleChangeListener?.invoke(subtitles.toList())
-                }
+                if (dragMode != DragMode.NONE) onSubtitleChangeListener?.invoke(subtitles.toList())
 
                 downOnSelectedSubtitle = false
                 dragMode = DragMode.NONE
@@ -1053,6 +1096,15 @@ class WaveformTimelineView @JvmOverloads constructor(
         val correctedPositionMs = visibleStartMs.coerceIn(0L, durationMs)
         currentPosition = correctedPositionMs.toFloat() / durationMs
         onDraggedViewportPlayheadCorrection?.invoke(correctedPositionMs)
+    }
+
+    private fun notifyIfLimitedPlaybackRangeOutOfView() {
+        val index = limitedPlaybackIndex ?: return
+        val subtitle = subtitles.getOrNull(index) ?: return
+        val visibleEndMs = visibleStartMs + visibleDurationMs
+        if (subtitle.endTime < visibleStartMs || subtitle.startTime > visibleEndMs) {
+            onLimitedPlaybackRangeOutOfView?.invoke()
+        }
     }
 
     private fun beginPinch(event: MotionEvent) {
@@ -1153,6 +1205,12 @@ class WaveformTimelineView @JvmOverloads constructor(
         }
     }
 
+    private fun findSubtitleIndex(x: Float, y: Float): Int {
+        if (!isInSubtitleArea(y)) return -1
+        val subtitle = findSubtitle(x) ?: return -1
+        return subtitles.indexOf(subtitle)
+    }
+
     private fun detectDragMode(x: Float, sub: SubtitleEntry): DragMode {
         val sx = timeToXUnclamped(sub.startTime); val ex = timeToXUnclamped(sub.endTime)
         return when {
@@ -1171,6 +1229,8 @@ class WaveformTimelineView @JvmOverloads constructor(
     fun initialize(durationMs: Long, subtitles: List<SubtitleEntry>) {
         this.durationMs = durationMs
         this.subtitles = subtitles.toMutableList()
+        this.limitedPlaybackIndex = null
+        onLimitedPlaybackRangeChange?.invoke(null)
         this.totalChunks = ((durationMs + CHUNK_DURATION_MS - 1) / CHUNK_DURATION_MS).toInt()
         this.chunkData = Array(totalChunks) { null }
         this.chunkRequestedSamples = IntArray(totalChunks)
@@ -1275,6 +1335,10 @@ class WaveformTimelineView @JvmOverloads constructor(
     fun setSubtitles(list: List<SubtitleEntry>) {
         subtitles = list.toMutableList()
         selectedIndices = emptySet()
+        if (limitedPlaybackIndex?.let { it !in subtitles.indices } == true) {
+            limitedPlaybackIndex = null
+            onLimitedPlaybackRangeChange?.invoke(null)
+        }
         post { invalidate() }
     }
 
@@ -1282,6 +1346,7 @@ class WaveformTimelineView @JvmOverloads constructor(
         subtitles = list.toMutableList()
         // 插入位置在选中索引之前或等于时，选中索引 +1
         selectedIndices = selectedIndices.map { if (it >= insertedAt) it + 1 else it }.toSet()
+        limitedPlaybackIndex = limitedPlaybackIndex?.let { if (it >= insertedAt) it + 1 else it }
         onSelectedIndicesChangeListener?.invoke(selectedIndices)
         post { invalidate() }
     }
@@ -1304,6 +1369,14 @@ class WaveformTimelineView @JvmOverloads constructor(
                 idx - offset
             }
         }.toSet()
+        limitedPlaybackIndex = limitedPlaybackIndex?.let { index ->
+            if (index in deletedIndices) {
+                onLimitedPlaybackRangeChange?.invoke(null)
+                null
+            } else {
+                index - sortedDeleted.count { it < index }
+            }
+        }
         onSelectedIndicesChangeListener?.invoke(selectedIndices)
         post { invalidate() }
     }

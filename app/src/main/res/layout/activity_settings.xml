@@ -278,13 +278,13 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="选中字幕时在区间内循环播放"
+                        android:text="限定区间循环播放"
                         android:textSize="14sp"/>
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="选中字幕块后，播放头到达字幕结束时间时自动跳回开始时间循环"
+                        android:text="长按波形字幕块限定区间并双击播放时，结束后自动回到开头循环；关闭则播放一次后暂停"
                         android:textSize="12sp"
                         android:textColor="@color/on_surface_variant"
                         android:paddingTop="2dp"/>

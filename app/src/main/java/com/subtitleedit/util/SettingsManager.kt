@@ -211,15 +211,11 @@ class SettingsManager private constructor(context: Context) {
         prefs.edit().putString(KEY_WAVEFORM_CACHE_LOCATION, location).apply()
     }
     
-    /**
-     * 获取是否启用选中字幕循环播放
-     */
+    /** 获取限定字幕区间播放结束后是否循环。 */
     fun isLoopSelectedSubtitleEnabled(): Boolean =
         prefs.getBoolean(KEY_LOOP_SELECTED_SUBTITLE, false)
     
-    /**
-     * 设置是否启用选中字幕循环播放
-     */
+    /** 设置限定字幕区间播放结束后是否循环。 */
     fun setLoopSelectedSubtitleEnabled(enabled: Boolean) =
         prefs.edit().putBoolean(KEY_LOOP_SELECTED_SUBTITLE, enabled).apply()
 
