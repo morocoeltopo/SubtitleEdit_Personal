@@ -107,6 +107,7 @@ class WaveformTimelineView @JvmOverloads constructor(
     private var dragStartVisibleStartMs = 0L
     private var clickedOnSubtitle = false
     private var downOnSelectedSubtitle = false  // ACTION_DOWN 时是否点在已选中字幕上
+    private var activePointerId = MotionEvent.INVALID_POINTER_ID
 
     // ==================== Bitmap 缓存 ====================
 
@@ -894,20 +895,32 @@ class WaveformTimelineView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // 打轴模式：允许视口进入音频两端的虚拟缓冲区，便于从边界向外打轴。
         if (isTimestampingMode) {
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    activePointerId = event.getPointerId(0)
                     lastTouchXForTimestamp = event.x
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = event.x - lastTouchXForTimestamp
+                    // 多指期间不把任意一根手指的移动误判为时间轴拖动。
+                    if (event.pointerCount > 1) return true
+                    val pointerIndex = event.findPointerIndex(activePointerId)
+                    if (pointerIndex < 0) return true
+                    val touchX = event.getX(pointerIndex)
+                    val dx = touchX - lastTouchXForTimestamp
                     val dMs = (-dx / width * visibleDurationMs).toLong()
                     val virtualPaddingMs = timestampVirtualPaddingMs()
                     visibleStartMs = (visibleStartMs + dMs).coerceIn(
                         -virtualPaddingMs,
                         maxOf(0L, durationMs - visibleDurationMs) + virtualPaddingMs
                     )
-                    lastTouchXForTimestamp = event.x
+                    lastTouchXForTimestamp = touchX
                     invalidate()
+                }
+                MotionEvent.ACTION_POINTER_UP -> {
+                    rebaseToRemainingPointer(event, timestamping = true)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    activePointerId = MotionEvent.INVALID_POINTER_ID
                 }
             }
             return true
@@ -916,8 +929,9 @@ class WaveformTimelineView @JvmOverloads constructor(
         scaleGestureDetector.onTouchEvent(event)
         gestureDetector.onTouchEvent(event)
 
-        when (event.action) {
+        when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                activePointerId = event.getPointerId(0)
                 dragStartX = event.x
                 clickedOnSubtitle = false
 
@@ -952,8 +966,23 @@ class WaveformTimelineView @JvmOverloads constructor(
                 return true
             }
 
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                // 缩放交给 ScaleGestureDetector；视口拖动在恢复单指时重新建立基准。
+                return true
+            }
+
+            MotionEvent.ACTION_POINTER_UP -> {
+                rebaseToRemainingPointer(event, timestamping = false)
+                return true
+            }
+
             MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - dragStartX
+                // 两指阶段只处理缩放，避免把其中一根手指的位置当作单指拖动位置。
+                if (event.pointerCount > 1 || scaleGestureDetector.isInProgress) return true
+                val pointerIndex = event.findPointerIndex(activePointerId)
+                if (pointerIndex < 0) return true
+                val touchX = event.getX(pointerIndex)
+                val dx = touchX - dragStartX
 
                 if (isDraggingWaveform) {
                     val dt = (dx / width * visibleDurationMs).toLong()
@@ -979,7 +1008,7 @@ class WaveformTimelineView @JvmOverloads constructor(
 
                 if (dragMode == DragMode.NONE || currentSubtitle == null) return true
                 val s = currentSubtitle!!
-                val dt = xToTime(event.x) - xToTime(dragStartX)
+                val dt = xToTime(touchX) - xToTime(dragStartX)
 
                 var changed = false
                 when (dragMode) {
@@ -1006,7 +1035,9 @@ class WaveformTimelineView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                val dx = event.x - dragStartX
+                val pointerIndex = event.findPointerIndex(activePointerId)
+                val touchX = if (pointerIndex >= 0) event.getX(pointerIndex) else event.x
+                val dx = touchX - dragStartX
 
                 if (downOnSelectedSubtitle && dragMode == DragMode.NONE && Math.abs(dx) < 10f) {
                     // 点在已选中字幕上，且没有拖动 → 取消选中
@@ -1020,11 +1051,49 @@ class WaveformTimelineView @JvmOverloads constructor(
                 dragMode = DragMode.NONE
                 currentSubtitle = null
                 isDraggingWaveform = false
+                activePointerId = MotionEvent.INVALID_POINTER_ID
                 invalidate()
                 return true
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    /**
+     * 多指切回单指时，将当前位置设为新的拖动基准。
+     * MotionEvent 的 pointer index 会在手指抬起后重新排列，不能继续沿用旧的 event.x 基准。
+     */
+    private fun rebaseToRemainingPointer(event: MotionEvent, timestamping: Boolean) {
+        val liftedIndex = event.actionIndex
+        val liftedPointerId = event.getPointerId(liftedIndex)
+
+        var remainingIndex = if (activePointerId != liftedPointerId) {
+            event.findPointerIndex(activePointerId)
+        } else {
+            -1
+        }
+        if (remainingIndex < 0 || remainingIndex == liftedIndex) {
+            remainingIndex = (0 until event.pointerCount).firstOrNull { it != liftedIndex } ?: -1
+        }
+
+        if (remainingIndex < 0) {
+            activePointerId = MotionEvent.INVALID_POINTER_ID
+            return
+        }
+
+        activePointerId = event.getPointerId(remainingIndex)
+        val remainingX = event.getX(remainingIndex)
+        if (timestamping) {
+            lastTouchXForTimestamp = remainingX
+            return
+        }
+
+        dragStartX = remainingX
+        dragStartVisibleStartMs = visibleStartMs
+        currentSubtitle?.let { subtitle ->
+            dragStartStartTime = subtitle.startTime
+            dragStartEndTime = subtitle.endTime
+        }
     }
 
     private fun selectSubtitle(index: Int) {

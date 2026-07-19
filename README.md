@@ -6,13 +6,11 @@
 
 给音声字幕翻译的时候，不方便用电脑，在手机上改发现没有合适的软件
 
-就借助AI做了一个，功能参考了subtitle edit，目前软件的操作逻辑主要根据个人使用习惯来做
+就借助AI做了一个，功能参考了subtitle edit，操作逻辑主要根据个人使用习惯来做
 
 目前主要完善基础的字幕编辑功能，一边做新功能一边优化操作逻辑一边修bug
 
 可以根据波形图和频谱图快速对轴
-
-完善语音转字幕功能后会尝试做视频字幕相关的字幕编辑功能
 
 ## 主要功能
 
@@ -84,19 +82,17 @@
 
 1. 克隆项目
 
-    ```bash
-    git clone https://github.com/nihaina/SubtitleEditforAndroid
-    cd SubtitleEditforAndroid
-    ```
-
+   ```bash
+   git clone https://github.com/nihaina/SubtitleEditforAndroid
+   cd SubtitleEditforAndroid
+   ```
 2. 打开项目
 3. 同步 Gradle 依赖
 4. 构建 Debug APK
 
-    ```bash
-    ./gradlew assembleDebug
-    ```
-
+   ```bash
+   ./gradlew assembleDebug
+   ```
 5. 运行应用
 
 ## 使用说明
