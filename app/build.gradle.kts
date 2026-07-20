@@ -121,6 +121,9 @@ dependencies {
     // OkHttp
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // tar.bz2 extraction for downloadable speech models
+    implementation("org.apache.commons:commons-compress:1.26.1")
+
     // Standalone ONNX Runtime Java API for HTDemucs vocal separation.
     // Match the ONNX Runtime shared library already shipped with sherpa-onnx.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")

@@ -1,8 +1,13 @@
 package com.subtitleedit
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
@@ -11,9 +16,16 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.subtitleedit.databinding.ActivityModelSettingsBinding
+import com.subtitleedit.util.ModelDownloadProgressDialog
+import com.subtitleedit.util.ModelDownloader
 import com.subtitleedit.util.OverwritingToast
 import com.subtitleedit.util.SettingsManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -31,13 +43,14 @@ class ModelSettingsActivity : AppCompatActivity() {
     private var modelType: String = SettingsManager.ASR_MODEL_WHISPER
     private var updatingVadThreshold = false
     private var accessWarningShown = false
+    private var modelDownloadJob: Job? = null
+    private var modelDownloadDialog: ModelDownloadProgressDialog? = null
+    private var pendingStorageAction: (() -> Unit)? = null
 
     private companion object {
         private const val VAD_THRESHOLD_MIN = 0.1f
         private const val VAD_THRESHOLD_MAX = 0.9f
         private const val VAD_THRESHOLD_STEP = 0.05f
-        private const val SENSEVOICE_MODEL_DOWNLOAD_URL =
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2"
     }
 
     // Encoder 文件选择器
@@ -68,6 +81,14 @@ class ModelSettingsActivity : AppCompatActivity() {
         uri?.let { handleSelectedVad(it) }
     }
 
+    private val manageStorageLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { continuePendingModelDownload() }
+
+    private val writeStoragePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { continuePendingModelDownload() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityModelSettingsBinding.inflate(layoutInflater)
@@ -85,7 +106,7 @@ class ModelSettingsActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowHomeEnabled(true)
-        supportActionBar?.title = "模型设置"
+        supportActionBar?.title = "语音转录设置"
 
         binding.toolbar.setNavigationOnClickListener {
             onBackPressedDispatcher.onBackPressed()
@@ -96,6 +117,8 @@ class ModelSettingsActivity : AppCompatActivity() {
         binding.btnSelectEncoder.setOnClickListener {
             encoderPickerLauncher.launch(arrayOf("*/*"))
         }
+        binding.btnDownloadAsrModel.setOnClickListener { showAsrDownloadOptions() }
+        binding.btnResetAsrModel.setOnClickListener { resetCurrentAsrModel() }
 
         binding.btnSelectDecoder.setOnClickListener {
             decoderPickerLauncher.launch(arrayOf("*/*"))
@@ -127,8 +150,204 @@ class ModelSettingsActivity : AppCompatActivity() {
             showModelGuide()
         }
 
-        binding.tvQuickDownload.setOnClickListener {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SENSEVOICE_MODEL_DOWNLOAD_URL)))
+    }
+
+    private fun showAsrDownloadOptions() {
+        if (modelDownloadJob?.isActive == true) {
+            OverwritingToast.makeText(this, "模型正在下载", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
+            AlertDialog.Builder(this)
+                .setTitle("一键下载导入")
+                .setMessage(
+                    "是否一键下载导入 SenseVoice 模型？\n\n" +
+                        "文件存放至：\n/Download/SubtitleEdit/models/${ModelDownloader.SENSEVOICE_DIRECTORY_NAME}\n\n" +
+                        "约占用 1.09 GB 存储空间。"
+                )
+                .setPositiveButton("下载并导入") { _, _ ->
+                    runWithModelStorageAccess { startSenseVoiceDownload() }
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        } else {
+            showWhisperDownloadModelPicker()
+        }
+    }
+
+    private fun showWhisperDownloadModelPicker() {
+        val options = ModelDownloader.WHISPER_MODELS
+        val labels = options.map { "${it.displayName}（${it.sizeLabel}）" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("选择 Whisper 模型")
+            .setItems(labels) { _, which -> confirmWhisperDownload(options[which]) }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun confirmWhisperDownload(option: ModelDownloader.WhisperModelOption) {
+        AlertDialog.Builder(this)
+            .setTitle("一键下载导入 Whisper ${option.displayName}")
+            .setMessage(
+                "是否一键下载导入该模型？\n\n" +
+                    "文件存放至：\n/Download/SubtitleEdit/models/${option.directoryName}\n\n" +
+                    "${option.sizeLabel} 存储空间。"
+            )
+            .setPositiveButton("下载并导入") { _, _ ->
+                runWithModelStorageAccess { startWhisperDownload(option) }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun startSenseVoiceDownload() {
+        if (modelDownloadJob?.isActive == true) return
+
+        val progressDialog = ModelDownloadProgressDialog(
+            this,
+            "下载 SenseVoice 模型"
+        ) { modelDownloadJob?.cancel() }
+        modelDownloadDialog = progressDialog
+        progressDialog.show()
+        setAsrModelActionsEnabled(false)
+
+        modelDownloadJob = lifecycleScope.launch {
+            try {
+                val files = ModelDownloader.downloadSenseVoice { progress ->
+                    runOnUiThread { modelDownloadDialog?.update(progress) }
+                }
+                modelType = SettingsManager.ASR_MODEL_SENSEVOICE
+                settingsManager.setAsrModelType(modelType)
+                settingsManager.setSenseVoiceModelPath(Uri.fromFile(files.model).toString())
+                settingsManager.setSenseVoiceTokensPath(Uri.fromFile(files.tokens).toString())
+                loadModelPaths()
+                updateAsrModelUi()
+                progressDialog.dismiss()
+                OverwritingToast.makeText(
+                    this@ModelSettingsActivity,
+                    "SenseVoice 模型已下载、解压并自动选择\n${files.model.parentFile?.absolutePath}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: CancellationException) {
+                progressDialog.dismiss()
+                throw e
+            } catch (e: Exception) {
+                progressDialog.dismiss()
+                OverwritingToast.makeText(
+                    this@ModelSettingsActivity,
+                    "SenseVoice 模型下载失败：${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                setAsrModelActionsEnabled(true)
+                if (modelDownloadDialog === progressDialog) modelDownloadDialog = null
+                modelDownloadJob = null
+            }
+        }
+    }
+
+    private fun startWhisperDownload(option: ModelDownloader.WhisperModelOption) {
+        if (modelDownloadJob?.isActive == true) return
+        val progressDialog = ModelDownloadProgressDialog(
+            this,
+            "下载 Whisper ${option.displayName} 模型"
+        ) { modelDownloadJob?.cancel() }
+        modelDownloadDialog = progressDialog
+        progressDialog.show()
+        setAsrModelActionsEnabled(false)
+
+        modelDownloadJob = lifecycleScope.launch {
+            try {
+                val files = ModelDownloader.downloadWhisper(option) { progress ->
+                    runOnUiThread { modelDownloadDialog?.update(progress) }
+                }
+                modelType = SettingsManager.ASR_MODEL_WHISPER
+                settingsManager.setAsrModelType(modelType)
+                settingsManager.setWhisperEncoderPath(Uri.fromFile(files.encoder).toString())
+                settingsManager.setWhisperDecoderPath(Uri.fromFile(files.decoder).toString())
+                settingsManager.setWhisperTokensPath(Uri.fromFile(files.tokens).toString())
+                loadModelPaths()
+                updateAsrModelUi()
+                progressDialog.dismiss()
+                OverwritingToast.makeText(
+                    this@ModelSettingsActivity,
+                    "Whisper ${option.displayName} 模型已下载、解压并自动选择\n${files.encoder.parentFile?.absolutePath}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: CancellationException) {
+                progressDialog.dismiss()
+                throw e
+            } catch (e: Exception) {
+                progressDialog.dismiss()
+                OverwritingToast.makeText(
+                    this@ModelSettingsActivity,
+                    "Whisper ${option.displayName} 模型下载失败：${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                setAsrModelActionsEnabled(true)
+                if (modelDownloadDialog === progressDialog) modelDownloadDialog = null
+                modelDownloadJob = null
+            }
+        }
+    }
+
+    private fun resetCurrentAsrModel() {
+        if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
+            settingsManager.clearSenseVoiceModelPaths()
+        } else {
+            settingsManager.clearWhisperModelPaths()
+        }
+        loadModelPaths()
+        updateAsrModelUi()
+        OverwritingToast.makeText(this, "已清除当前模型选择，请重新选择", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun setAsrModelActionsEnabled(enabled: Boolean) {
+        binding.btnDownloadAsrModel.isEnabled = enabled
+        binding.btnResetAsrModel.isEnabled = enabled
+        binding.btnSwitchAsrModel.isEnabled = enabled
+    }
+
+    private fun runWithModelStorageAccess(action: () -> Unit) {
+        if (hasModelStorageAccess()) {
+            action()
+            return
+        }
+        pendingStorageAction = action
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val appIntent = Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            val opened = runCatching { manageStorageLauncher.launch(appIntent) }.isSuccess ||
+                runCatching {
+                    manageStorageLauncher.launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                }.isSuccess
+            if (!opened) {
+                pendingStorageAction = null
+                OverwritingToast.makeText(this, "无法打开存储权限设置", Toast.LENGTH_LONG).show()
+            }
+        } else {
+            writeStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+    }
+
+    private fun hasModelStorageAccess(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED
+        }
+
+    private fun continuePendingModelDownload() {
+        val action = pendingStorageAction ?: return
+        pendingStorageAction = null
+        if (hasModelStorageAccess()) {
+            action()
+        } else {
+            OverwritingToast.makeText(this, "需要存储权限才能保存下载的模型", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -291,6 +510,7 @@ class ModelSettingsActivity : AppCompatActivity() {
                 settingsManager.setWhisperEncoderPath(encoderPath)
             }
             binding.tvEncoderFile.text = fileName
+            updateAsrModelUi()
 
         } catch (e: Exception) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "选择文件失败：${e.message}", Toast.LENGTH_LONG).show()
@@ -319,6 +539,7 @@ class ModelSettingsActivity : AppCompatActivity() {
             decoderPath = uri.toString()
             settingsManager.setWhisperDecoderPath(decoderPath)
             binding.tvDecoderFile.text = fileName
+            updateAsrModelUi()
 
         } catch (e: Exception) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "选择文件失败：${e.message}", Toast.LENGTH_LONG).show()
@@ -351,6 +572,7 @@ class ModelSettingsActivity : AppCompatActivity() {
                 settingsManager.setWhisperTokensPath(tokensPath)
             }
             binding.tvTokensFile.text = fileName
+            updateAsrModelUi()
 
         } catch (e: Exception) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "选择文件失败：${e.message}", Toast.LENGTH_LONG).show()
@@ -426,18 +648,22 @@ class ModelSettingsActivity : AppCompatActivity() {
         val message = if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) """
             SenseVoice 模型下载指引：
 
-            1. 访问 GitHub 下载页面：
+            1. 推荐直接点击“选择模型”右侧的蓝色下载按钮，应用会自动下载、解压并选择模型。
+
+            2. 如需手动下载，可访问 GitHub 下载页面：
                https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models
 
-            2. 下载普通 CPU ONNX 模型包：
+            3. 下载普通 CPU ONNX 模型包：
                sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17
 
-            3. 分别选择：
+            4. 分别选择：
                • model.int8.onnx（或 model.onnx）
                • tokens.txt
 
         """.trimIndent() else """
             Whisper 模型下载指引：
+
+            如果需要使用其他whisper模型，可自行下载导入。
 
             1. 访问 GitHub 下载页面：
                https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models
@@ -550,11 +776,23 @@ class ModelSettingsActivity : AppCompatActivity() {
 
     private fun updateAsrModelUi() {
         val senseVoice = modelType == SettingsManager.ASR_MODEL_SENSEVOICE
+        val hasSelectedModel = encoderPath.isNotBlank() || decoderPath.isNotBlank() || tokensPath.isNotBlank()
         binding.tvAsrModelTitle.text = if (senseVoice) "SenseVoice 模型" else "Whisper 模型"
-        binding.tvQuickDownload.visibility = if (senseVoice) View.VISIBLE else View.GONE
+        binding.btnDownloadAsrModel.contentDescription =
+            if (senseVoice) "一键下载并导入 SenseVoice 模型" else "选择并下载 Whisper 模型"
+        binding.btnDownloadAsrModel.visibility = if (hasSelectedModel) View.GONE else View.VISIBLE
+        binding.btnResetAsrModel.visibility = if (hasSelectedModel) View.VISIBLE else View.GONE
         binding.tvEncoderLabel.text = if (senseVoice) "SenseVoice 模型" else "Encoder 模型"
         binding.btnSelectEncoder.text = if (senseVoice) "选择模型" else "选择 Encoder"
         binding.layoutDecoder.visibility = if (senseVoice) View.GONE else View.VISIBLE
         binding.btnWhisperConfig.visibility = if (senseVoice) View.GONE else View.VISIBLE
+    }
+
+    override fun onDestroy() {
+        modelDownloadJob?.cancel()
+        pendingStorageAction = null
+        modelDownloadDialog?.dismiss()
+        modelDownloadDialog = null
+        super.onDestroy()
     }
 }

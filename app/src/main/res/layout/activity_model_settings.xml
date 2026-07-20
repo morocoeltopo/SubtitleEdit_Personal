@@ -18,7 +18,7 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             app:navigationIcon="@drawable/ic_back"
-            app:title="模型设置" />
+            app:title="语音转录设置" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -136,13 +136,60 @@
                                     android:textColor="@color/on_surface_variant"
                                     android:textSize="12sp" />
 
-                                <Button
-                                    android:id="@+id/btnSelectEncoder"
-                                    style="@style/Widget.Material3.Button.OutlinedButton"
-                                    android:layout_width="wrap_content"
+                                <LinearLayout
+                                    android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="4dp"
-                                    android:text="选择 Encoder" />
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
+
+                                    <Button
+                                        android:id="@+id/btnSelectEncoder"
+                                        style="@style/Widget.Material3.Button.OutlinedButton"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="选择 Encoder" />
+
+                                    <com.google.android.material.button.MaterialButton
+                                        android:id="@+id/btnDownloadAsrModel"
+                                        style="@style/Widget.MaterialComponents.Button"
+                                        android:layout_width="28dp"
+                                        android:layout_height="28dp"
+                                        android:layout_marginStart="8dp"
+                                        android:backgroundTint="@color/primary"
+                                        android:contentDescription="一键下载并导入模型"
+                                        android:insetTop="0dp"
+                                        android:insetBottom="0dp"
+                                        android:minWidth="0dp"
+                                        android:minHeight="0dp"
+                                        android:padding="5dp"
+                                        android:text=""
+                                        android:visibility="gone"
+                                        app:cornerRadius="14dp"
+                                        app:icon="@drawable/ic_download"
+                                        app:iconGravity="textStart"
+                                        app:iconPadding="0dp"
+                                        app:iconSize="18dp"
+                                        app:iconTint="@color/white" />
+
+                                    <TextView
+                                        android:id="@+id/btnResetAsrModel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="28dp"
+                                        android:layout_marginStart="8dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:clickable="true"
+                                        android:focusable="true"
+                                        android:gravity="center"
+                                        android:paddingStart="6dp"
+                                        android:paddingEnd="6dp"
+                                        android:singleLine="true"
+                                        android:text="重置"
+                                        android:textColor="@color/primary"
+                                        android:textSize="14sp"
+                                        android:visibility="gone" />
+
+                                </LinearLayout>
                             </LinearLayout>
                         </LinearLayout>
 
@@ -242,19 +289,6 @@
                         android:layout_marginTop="4dp"
                         android:text="选择 Tokens"
                         style="@style/Widget.Material3.Button.OutlinedButton" />
-
-                    <TextView
-                        android:id="@+id/tvQuickDownload"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:gravity="end"
-                        android:text="快速下载"
-                        android:textColor="@color/primary"
-                        android:textSize="12sp"
-                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/tvModelGuide"

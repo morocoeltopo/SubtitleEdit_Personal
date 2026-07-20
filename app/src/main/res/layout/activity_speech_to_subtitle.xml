@@ -41,7 +41,7 @@
             android:layout_height="48dp"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="16dp"
-            android:text="模型设置" />
+            android:text="语音转录设置" />
 
         <!-- 文件选择区域 -->
         <com.google.android.material.card.MaterialCardView

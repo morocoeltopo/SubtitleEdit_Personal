@@ -52,6 +52,7 @@ class SettingsManager private constructor(context: Context) {
         private const val KEY_DEMIX_BASS_MODEL_URI = "demix_bass_model_uri"
         private const val KEY_DEMIX_OTHER_MODEL_URI = "demix_other_model_uri"
         private const val KEY_DEMIX_GENERAL_MODEL_URI = "demix_general_model_uri"
+        private const val KEY_DEMIX_MODEL_TYPE = "demix_model_type"
         private const val KEY_DEMIX_ORT_GRAPH_OPTIMIZATION = "demix_ort_graph_optimization"
         private const val KEY_DEMIX_ORT_CPU_ARENA = "demix_ort_cpu_arena"
 
@@ -64,6 +65,9 @@ class SettingsManager private constructor(context: Context) {
 
         const val ASR_MODEL_WHISPER = "whisper"
         const val ASR_MODEL_SENSEVOICE = "sensevoice"
+
+        const val DEMIX_MODEL_GENERAL = "general"
+        const val DEMIX_MODEL_FT = "ft"
 
         const val TTS_LANGUAGE_SYSTEM = "system"
         const val TTS_LANGUAGE_CHINESE = "zh-CN"
@@ -263,6 +267,14 @@ class SettingsManager private constructor(context: Context) {
         prefs.edit().putString(KEY_WHISPER_TOKENS_PATH, path).apply()
     }
 
+    fun clearWhisperModelPaths() {
+        prefs.edit()
+            .putString(KEY_WHISPER_ENCODER_PATH, "")
+            .putString(KEY_WHISPER_DECODER_PATH, "")
+            .putString(KEY_WHISPER_TOKENS_PATH, "")
+            .apply()
+    }
+
     fun getAsrModelType(): String = prefs.getString(KEY_ASR_MODEL_TYPE, ASR_MODEL_WHISPER)
         ?.takeIf { it == ASR_MODEL_WHISPER || it == ASR_MODEL_SENSEVOICE }
         ?: ASR_MODEL_WHISPER
@@ -281,6 +293,13 @@ class SettingsManager private constructor(context: Context) {
 
     fun setSenseVoiceTokensPath(path: String) {
         prefs.edit().putString(KEY_SENSEVOICE_TOKENS_PATH, path).apply()
+    }
+
+    fun clearSenseVoiceModelPaths() {
+        prefs.edit()
+            .putString(KEY_SENSEVOICE_MODEL_PATH, "")
+            .putString(KEY_SENSEVOICE_TOKENS_PATH, "")
+            .apply()
     }
 
     /**
@@ -450,6 +469,15 @@ class SettingsManager private constructor(context: Context) {
 
     fun setDemixModelUri(stem: String, uri: String) {
         prefs.edit().putString(demixModelKey(stem), uri).apply()
+    }
+
+    fun getDemixModelType(): String = prefs.getString(KEY_DEMIX_MODEL_TYPE, DEMIX_MODEL_GENERAL)
+        ?.takeIf { it == DEMIX_MODEL_GENERAL || it == DEMIX_MODEL_FT }
+        ?: DEMIX_MODEL_GENERAL
+
+    fun setDemixModelType(type: String) {
+        require(type == DEMIX_MODEL_GENERAL || type == DEMIX_MODEL_FT)
+        prefs.edit().putString(KEY_DEMIX_MODEL_TYPE, type).apply()
     }
 
     fun isDemixOrtGraphOptimizationEnabled(): Boolean =

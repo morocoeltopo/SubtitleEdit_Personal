@@ -127,10 +127,11 @@ class VocalSeparationActivity : AppCompatActivity() {
     private fun loadState() {
         discardInaccessibleModelUris()
         val hasGeneral = isModelConfigured("general")
-        binding.checkVocals.isEnabled = hasGeneral || isModelConfigured(VocalSeparationEngine.Stem.VOCALS)
-        binding.checkDrums.isEnabled = hasGeneral || isModelConfigured(VocalSeparationEngine.Stem.DRUMS)
-        binding.checkBass.isEnabled = hasGeneral || isModelConfigured(VocalSeparationEngine.Stem.BASS)
-        binding.checkOther.isEnabled = hasGeneral || isModelConfigured(VocalSeparationEngine.Stem.OTHER)
+        val useFtModels = settings.getDemixModelType() == SettingsManager.DEMIX_MODEL_FT
+        binding.checkVocals.isEnabled = hasGeneral || useFtModels && isModelConfigured(VocalSeparationEngine.Stem.VOCALS)
+        binding.checkDrums.isEnabled = hasGeneral || useFtModels && isModelConfigured(VocalSeparationEngine.Stem.DRUMS)
+        binding.checkBass.isEnabled = hasGeneral || useFtModels && isModelConfigured(VocalSeparationEngine.Stem.BASS)
+        binding.checkOther.isEnabled = hasGeneral || useFtModels && isModelConfigured(VocalSeparationEngine.Stem.OTHER)
         if (!binding.checkVocals.isEnabled) binding.checkVocals.isChecked = false
         if (!binding.checkDrums.isEnabled) binding.checkDrums.isChecked = false
         if (!binding.checkBass.isEnabled) binding.checkBass.isChecked = false
@@ -185,9 +186,10 @@ class VocalSeparationActivity : AppCompatActivity() {
         val output = outputDirUri
         val stems = selectedStems()
         val hasGeneral = isModelConfigured("general")
+        val useFtModels = settings.getDemixModelType() == SettingsManager.DEMIX_MODEL_FT
         val modelsAvailable = when {
             stems.size > 1 -> hasGeneral
-            stems.size == 1 -> isModelConfigured(stems.first()) || hasGeneral
+            stems.size == 1 -> hasGeneral || useFtModels && isModelConfigured(stems.first())
             else -> false
         }
         if (selectedFiles.isEmpty() || output == null || !modelsAvailable) {
@@ -238,10 +240,14 @@ class VocalSeparationActivity : AppCompatActivity() {
                     appendRuntimeLog("通用模型：${getFileName(Uri.parse(settings.getDemixModelUri("general")))}")
                 } else {
                     val stem = stems.first()
-                    if (isModelConfigured(stem)) {
+                    val useFtModel = settings.getDemixModelType() == SettingsManager.DEMIX_MODEL_FT &&
+                        isModelConfigured(stem)
+                    if (useFtModel) {
                         appendRuntimeLog("推理路线：优先使用 ${stem.displayName} FT specialist")
-                    } else {
+                    } else if (settings.getDemixModelType() == SettingsManager.DEMIX_MODEL_FT) {
                         appendRuntimeLog("推理路线：未配置 ${stem.displayName} FT，回退通用模型")
+                    } else {
+                        appendRuntimeLog("推理路线：使用通用四轨模型")
                     }
                 }
                 val overwrittenBaseNames = mutableSetOf<String>()
@@ -305,10 +311,17 @@ class VocalSeparationActivity : AppCompatActivity() {
             showProgress("$prefix 正在运行 ONNX 分离", 10)
             val useGeneral = stems.size > 1
             val singleStem = stems.firstOrNull()
+            val useFtModels = settings.getDemixModelType() == SettingsManager.DEMIX_MODEL_FT
             val modelKey = if (useGeneral) "general"
-            else if (singleStem != null && isModelConfigured(singleStem)) singleStem.fileSuffix else "general"
+            else if (useFtModels && singleStem != null && isModelConfigured(singleStem)) singleStem.fileSuffix
+            else "general"
             val modelUri = Uri.parse(settings.getDemixModelUri(modelKey))
-            val modelLabel = if (useGeneral) "通用四轨模型" else if (modelKey == "general") "通用模型回退" else "${singleStem?.displayName} specialist"
+            val modelLabel = when {
+                useGeneral -> "通用四轨模型"
+                modelKey != "general" -> "${singleStem?.displayName} specialist"
+                useFtModels -> "通用模型回退"
+                else -> "通用四轨模型"
+            }
             appendRuntimeLog("$prefix 使用$modelLabel：${getFileName(modelUri)}")
             val result = withContext(Dispatchers.IO) {
                 withDirectModelPath(modelUri) { directPath, size ->

@@ -32,6 +32,7 @@ class SettingsActivity : AppCompatActivity() {
         setupCacheSection()
         setupModelSettings()
         setupTtsSettings()
+        setupModelManagement()
         setupAiSettings()
         setupLogSettings()
         setupPlaybackSettings()
@@ -60,6 +61,12 @@ class SettingsActivity : AppCompatActivity() {
     private fun setupTtsSettings() {
         binding.layoutTtsSettings.setOnClickListener {
             startActivity(Intent(this, TtsSettingsActivity::class.java))
+        }
+    }
+
+    private fun setupModelManagement() {
+        binding.layoutModelManagement.setOnClickListener {
+            startActivity(Intent(this, ModelManagementActivity::class.java))
         }
     }
 
