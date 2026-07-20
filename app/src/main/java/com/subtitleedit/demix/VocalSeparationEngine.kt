@@ -27,6 +27,8 @@ class VocalSeparationEngine(
     private val modelDisplayName: String,
     private val modelSize: Long? = null,
     private val threadCount: Int = 2,
+    private val graphOptimizationEnabled: Boolean = false,
+    private val cpuArenaEnabled: Boolean = false,
     private val log: (String) -> Unit = {}
 ) {
     enum class Stem(val fileSuffix: String, val displayName: String, val modelIndex: Int) {
@@ -66,13 +68,22 @@ class VocalSeparationEngine(
         log("输入张量：$INPUT_NAME [1, 2, $SEGMENT]")
         log("输出张量：$OUTPUT_NAME [1, 4, 2, $SEGMENT]")
         log("分块参数：44.1kHz / 双声道 / ${"%.2f".format(SEGMENT / SAMPLE_RATE.toDouble())}秒 / 25% 重叠")
-        log("ORT 线程：$threadCount；图优化：关闭；CPU arena：关闭")
+        log(
+            "ORT 线程：$threadCount；图优化：${enabledText(graphOptimizationEnabled)}；" +
+                "CPU arena：${enabledText(cpuArenaEnabled)}"
+        )
 
         val environment = OrtEnvironment.getEnvironment(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING, "subtitleedit-demix")
         OrtSession.SessionOptions().use { options ->
-            options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            options.setOptimizationLevel(
+                if (graphOptimizationEnabled) {
+                    OrtSession.SessionOptions.OptLevel.ALL_OPT
+                } else {
+                    OrtSession.SessionOptions.OptLevel.NO_OPT
+                }
+            )
             options.setMemoryPatternOptimization(false)
-            options.setCPUArenaAllocator(false)
+            options.setCPUArenaAllocator(cpuArenaEnabled)
             options.setIntraOpNumThreads(threadCount.coerceIn(1, 8))
             options.setInterOpNumThreads(1)
 
@@ -359,5 +370,7 @@ class VocalSeparationEngine(
             bytes >= 1024L -> "${"%.2f".format(bytes / 1024.0)} KB"
             else -> "$bytes B"
         }
+
+        private fun enabledText(enabled: Boolean): String = if (enabled) "开启" else "关闭"
     }
 }

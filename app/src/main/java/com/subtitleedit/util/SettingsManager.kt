@@ -52,6 +52,8 @@ class SettingsManager private constructor(context: Context) {
         private const val KEY_DEMIX_BASS_MODEL_URI = "demix_bass_model_uri"
         private const val KEY_DEMIX_OTHER_MODEL_URI = "demix_other_model_uri"
         private const val KEY_DEMIX_GENERAL_MODEL_URI = "demix_general_model_uri"
+        private const val KEY_DEMIX_ORT_GRAPH_OPTIMIZATION = "demix_ort_graph_optimization"
+        private const val KEY_DEMIX_ORT_CPU_ARENA = "demix_ort_cpu_arena"
 
         const val WAVEFORM_CACHE_APP = "app_cache"
         const val WAVEFORM_CACHE_SOURCE = "source_dir"
@@ -448,6 +450,20 @@ class SettingsManager private constructor(context: Context) {
 
     fun setDemixModelUri(stem: String, uri: String) {
         prefs.edit().putString(demixModelKey(stem), uri).apply()
+    }
+
+    fun isDemixOrtGraphOptimizationEnabled(): Boolean =
+        prefs.getBoolean(KEY_DEMIX_ORT_GRAPH_OPTIMIZATION, false)
+
+    fun setDemixOrtGraphOptimizationEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DEMIX_ORT_GRAPH_OPTIMIZATION, enabled).apply()
+    }
+
+    fun isDemixOrtCpuArenaEnabled(): Boolean =
+        prefs.getBoolean(KEY_DEMIX_ORT_CPU_ARENA, false)
+
+    fun setDemixOrtCpuArenaEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DEMIX_ORT_CPU_ARENA, enabled).apply()
     }
 
     private fun demixModelKey(stem: String): String = when (stem.lowercase()) {

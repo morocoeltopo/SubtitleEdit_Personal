@@ -4,8 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
-import android.text.method.LinkMovementMethod
-import android.text.util.Linkify
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
@@ -52,18 +50,6 @@ class VocalSeparationActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocumentTree()
     ) { uri -> uri?.let { handleOutputDirectory(it) } }
 
-    private val vocalsModelPicker = modelPicker(VocalSeparationEngine.Stem.VOCALS)
-    private val drumsModelPicker = modelPicker(VocalSeparationEngine.Stem.DRUMS)
-    private val bassModelPicker = modelPicker(VocalSeparationEngine.Stem.BASS)
-    private val otherModelPicker = modelPicker(VocalSeparationEngine.Stem.OTHER)
-    private val generalModelPicker = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { handleSelectedGeneralModel(it) } }
-
-    private fun modelPicker(stem: VocalSeparationEngine.Stem) = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { handleSelectedModel(stem, it) } }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityVocalSeparationBinding.inflate(layoutInflater)
@@ -108,13 +94,9 @@ class VocalSeparationActivity : AppCompatActivity() {
     }
 
     private fun setupButtons() {
-        val modelMimeTypes = arrayOf("application/octet-stream", "application/onnx", "*/*")
-        binding.tvModelHelp.setOnClickListener { showModelHelp() }
-        binding.btnSelectGeneralModel.setOnClickListener { generalModelPicker.launch(modelMimeTypes) }
-        binding.btnSelectVocalsModel.setOnClickListener { vocalsModelPicker.launch(modelMimeTypes) }
-        binding.btnSelectDrumsModel.setOnClickListener { drumsModelPicker.launch(modelMimeTypes) }
-        binding.btnSelectBassModel.setOnClickListener { bassModelPicker.launch(modelMimeTypes) }
-        binding.btnSelectOtherModel.setOnClickListener { otherModelPicker.launch(modelMimeTypes) }
+        binding.btnSeparationSettings.setOnClickListener {
+            startActivity(Intent(this, VocalSeparationSettingsActivity::class.java))
+        }
         binding.btnSelectFile.setOnClickListener {
             filePickerLauncher.launch(arrayOf("audio/*", "video/*"))
         }
@@ -144,11 +126,6 @@ class VocalSeparationActivity : AppCompatActivity() {
 
     private fun loadState() {
         discardInaccessibleModelUris()
-        updateGeneralModelUi()
-        updateModelUi(VocalSeparationEngine.Stem.VOCALS, binding.tvVocalsModel)
-        updateModelUi(VocalSeparationEngine.Stem.DRUMS, binding.tvDrumsModel)
-        updateModelUi(VocalSeparationEngine.Stem.BASS, binding.tvBassModel)
-        updateModelUi(VocalSeparationEngine.Stem.OTHER, binding.tvOtherModel)
         val hasGeneral = isModelConfigured("general")
         binding.checkVocals.isEnabled = hasGeneral || isModelConfigured(VocalSeparationEngine.Stem.VOCALS)
         binding.checkDrums.isEnabled = hasGeneral || isModelConfigured(VocalSeparationEngine.Stem.DRUMS)
@@ -198,49 +175,6 @@ class VocalSeparationActivity : AppCompatActivity() {
         path.mkdirs()
         outputDirUri = Uri.fromFile(path)
         binding.tvOutputDir.text = path.absolutePath
-    }
-
-    private fun handleSelectedModel(stem: VocalSeparationEngine.Stem, uri: Uri) {
-        val fileName = getFileName(uri)
-        if (!fileName.endsWith(".onnx", ignoreCase = true) ||
-            !fileName.contains(stem.fileSuffix, ignoreCase = true)) {
-            OverwritingToast.makeText(
-                this,
-                "请选择 ${stem.displayName} specialist ONNX 模型（文件名应包含 ${stem.fileSuffix}）",
-                Toast.LENGTH_LONG
-            ).show()
-            return
-        }
-        try {
-            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
-                if (descriptor.statSize == 0L) throw IllegalStateException("模型文件为空")
-            } ?: throw IllegalStateException("无法读取模型文件")
-            settings.setDemixModelUri(stem.fileSuffix, uri.toString())
-            appendRuntimeLog("已选择 ${stem.displayName} 模型：$fileName（直接从文档 URI 调用，不复制）")
-            loadState()
-        } catch (e: Exception) {
-            showError("选择 ${stem.displayName} 模型失败：${e.message}")
-        }
-    }
-
-    private fun handleSelectedGeneralModel(uri: Uri) {
-        val fileName = getFileName(uri)
-        if (!fileName.endsWith(".onnx", ignoreCase = true) || fileName.contains("_ft_", ignoreCase = true)) {
-            OverwritingToast.makeText(this, "请选择通用四轨 HTDemucs ONNX 模型（例如 htdemucs_fp16weights.onnx）", Toast.LENGTH_LONG).show()
-            return
-        }
-        try {
-            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
-                if (descriptor.statSize == 0L) throw IllegalStateException("模型文件为空")
-            } ?: throw IllegalStateException("无法读取模型文件")
-            settings.setDemixModelUri("general", uri.toString())
-            appendRuntimeLog("已选择通用四轨模型：$fileName（直接从文档 URI 调用，不复制）")
-            loadState()
-        } catch (e: Exception) {
-            showError("选择通用模型失败：${e.message}")
-        }
     }
 
     private fun updateStartButton() {
@@ -382,6 +316,8 @@ class VocalSeparationActivity : AppCompatActivity() {
                         directPath,
                         getFileName(modelUri),
                         size,
+                        graphOptimizationEnabled = settings.isDemixOrtGraphOptimizationEnabled(),
+                        cpuArenaEnabled = settings.isDemixOrtCpuArenaEnabled(),
                         log = { message -> appendRuntimeLog("$prefix $modelLabel: $message") }
                     )
                     engine.separate(
@@ -435,28 +371,6 @@ class VocalSeparationActivity : AppCompatActivity() {
         if (binding.checkDrums.isChecked) add(VocalSeparationEngine.Stem.DRUMS)
         if (binding.checkBass.isChecked) add(VocalSeparationEngine.Stem.BASS)
         if (binding.checkOther.isChecked) add(VocalSeparationEngine.Stem.OTHER)
-    }
-
-    private fun modelUri(stem: VocalSeparationEngine.Stem): String =
-        settings.getDemixModelUri(stem.fileSuffix)
-
-    private fun updateModelUi(stem: VocalSeparationEngine.Stem, textView: android.widget.TextView) {
-        val uriString = modelUri(stem)
-        textView.text = if (uriString.isBlank()) {
-            "未选择 ${stem.displayName} specialist 模型"
-        } else {
-            val uri = Uri.parse(uriString)
-            "${getFileName(uri)}\n已保存读取权限，将直接从原位置调用"
-        }
-    }
-
-    private fun updateGeneralModelUi() {
-        val uriString = settings.getDemixModelUri("general")
-        binding.tvGeneralModel.text = if (uriString.isBlank()) {
-            "未选择通用四轨模型"
-        } else {
-            "${getFileName(Uri.parse(uriString))}\n支持一次推理输出多个音轨"
-        }
     }
 
     private fun isModelConfigured(stem: VocalSeparationEngine.Stem): Boolean {
@@ -557,36 +471,6 @@ class VocalSeparationActivity : AppCompatActivity() {
 
     private fun showError(message: String) {
         AlertDialog.Builder(this).setTitle("人声分离失败").setMessage(message).setPositiveButton("确定", null).show()
-    }
-
-    private fun showModelHelp() {
-        val message = """
-            模型分为两类：
-
-            1. 通用模型
-            htdemucs_fp16weights.onnx，一次推理可以输出 Vocals、Drums、Bass、Other 多个音轨。选择两个或以上音轨时必须使用通用模型；单音轨没有对应 FT 模型时也会回退到通用模型。
-
-            下载地址：
-            https://huggingface.co/StemSplitio/htdemucs-onnx/tree/main
-
-            2. FT 单音轨模型
-            Vocals、Drums、Bass、Other 各有一个 specialist 模型。单音轨时优先使用对应 FT 模型，通常具有更好的对应音轨质量，但每个模型只能作为对应音轨使用。
-
-            下载地址：
-            https://huggingface.co/StemSplitio/htdemucs-ft-onnx/tree/main
-
-            模型只保存文件访问权限，应用会直接从原文件位置读取，不复制到缓存。
-        """.trimIndent()
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("人声分离模型帮助")
-            .setMessage(message)
-            .setPositiveButton("关闭", null)
-            .show()
-        dialog.findViewById<android.widget.TextView>(android.R.id.message)?.apply {
-            Linkify.addLinks(this, Linkify.WEB_URLS)
-            linksClickable = true
-            movementMethod = LinkMovementMethod.getInstance()
-        }
     }
 
     private fun getFileName(uri: Uri): String {
