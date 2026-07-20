@@ -414,6 +414,62 @@ object ModelDownloader {
         shouldWrite: (String) -> Boolean,
         onProgress: (Progress) -> Unit
     ) {
+        if (!NativeTarBz2Extractor.isLibraryLoaded) {
+            extractTarBz2Java(
+                archive = archive,
+                outputDir = outputDir,
+                progressMessage = progressMessage,
+                shouldWrite = shouldWrite,
+                onProgress = onProgress
+            )
+            return
+        }
+
+        val archiveSize = archive.length().coerceAtLeast(1L)
+        val callerJob = currentCoroutineContext()[kotlinx.coroutines.Job]
+        val nativeCallback = object : NativeTarBz2Extractor.Callback {
+            override fun shouldExtract(fileName: String): Boolean = shouldWrite(
+                fileName.substringAfterLast('/').substringAfterLast('\\')
+            )
+
+            override fun onProgress(compressedBytes: Long, totalBytes: Long) {
+                if (callerJob?.isActive == false) return
+                val total = totalBytes.takeIf { it > 0L } ?: archiveSize
+                onProgress(
+                    Progress(
+                        progressMessage,
+                        compressedBytes.coerceIn(0L, total),
+                        total
+                    )
+                )
+            }
+        }
+        try {
+            NativeTarBz2Extractor.extract(
+                archive = archive,
+                outputDir = outputDir,
+                maxEntries = MAX_ARCHIVE_ENTRIES,
+                maxExtractedBytes = MAX_EXTRACTED_BYTES,
+                callback = nativeCallback
+            )
+        } catch (e: NativeTarBz2Extractor.NativeUnavailableException) {
+            extractTarBz2Java(
+                archive = archive,
+                outputDir = outputDir,
+                progressMessage = progressMessage,
+                shouldWrite = shouldWrite,
+                onProgress = onProgress
+            )
+        }
+    }
+
+    private suspend fun extractTarBz2Java(
+        archive: File,
+        outputDir: File,
+        progressMessage: String,
+        shouldWrite: (String) -> Boolean,
+        onProgress: (Progress) -> Unit
+    ) {
         val rootPath = outputDir.canonicalFile.path + File.separator
         val archiveSize = archive.length().coerceAtLeast(1L)
         var entryCount = 0
@@ -425,14 +481,15 @@ object ModelDownloader {
                 BZip2CompressorInputStream(bufferedInput, true).use { bzipInput ->
                     TarArchiveInputStream(bzipInput).use { tarInput ->
                         fun reportProgress(force: Boolean = false) {
+                            val now = System.currentTimeMillis()
+                            if (!force && now - lastProgressAt < 200L) return
+
                             val compressedBytes = if (force) {
                                 archiveSize
                             } else {
                                 fileInput.channel.position().coerceIn(0L, archiveSize)
                             }
-                            val now = System.currentTimeMillis()
-                            if (force ||
-                                compressedBytes != lastCompressedBytes && now - lastProgressAt >= 200L) {
+                            if (force || compressedBytes != lastCompressedBytes) {
                                 onProgress(
                                     Progress(
                                         progressMessage,
@@ -441,8 +498,9 @@ object ModelDownloader {
                                     )
                                 )
                                 lastCompressedBytes = compressedBytes
-                                lastProgressAt = now
                             }
+                            // 即使缓冲读取尚未推进底层文件位置，也要限制下一次 position() 查询。
+                            lastProgressAt = now
                         }
 
                         val extractionBuffer = ByteArray(EXTRACTION_BUFFER_SIZE)

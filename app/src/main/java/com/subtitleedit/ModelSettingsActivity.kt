@@ -118,7 +118,7 @@ class ModelSettingsActivity : AppCompatActivity() {
             encoderPickerLauncher.launch(arrayOf("*/*"))
         }
         binding.btnDownloadAsrModel.setOnClickListener { showAsrDownloadOptions() }
-        binding.btnResetAsrModel.setOnClickListener { resetCurrentAsrModel() }
+        binding.btnResetAsrModel.setOnClickListener { confirmResetCurrentAsrModel() }
 
         binding.btnSelectDecoder.setOnClickListener {
             decoderPickerLauncher.launch(arrayOf("*/*"))
@@ -290,6 +290,23 @@ class ModelSettingsActivity : AppCompatActivity() {
                 modelDownloadJob = null
             }
         }
+    }
+
+    private fun confirmResetCurrentAsrModel() {
+        val modelName = if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
+            "SenseVoice"
+        } else {
+            "Whisper"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("重置模型选择")
+            .setMessage(
+                "确定清除当前 $modelName 模型选择吗？\n\n" +
+                    "模型文件不会被删除，重置后需要重新选择或导入。"
+            )
+            .setPositiveButton("重置") { _, _ -> resetCurrentAsrModel() }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun resetCurrentAsrModel() {

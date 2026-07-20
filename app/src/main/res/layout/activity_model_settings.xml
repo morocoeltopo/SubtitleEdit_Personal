@@ -146,8 +146,13 @@
                                     <Button
                                         android:id="@+id/btnSelectEncoder"
                                         style="@style/Widget.Material3.Button.OutlinedButton"
-                                        android:layout_width="wrap_content"
+                                        android:layout_width="0dp"
                                         android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:minWidth="0dp"
+                                        android:paddingStart="12dp"
+                                        android:paddingEnd="12dp"
+                                        android:singleLine="true"
                                         android:text="选择 Encoder" />
 
                                     <com.google.android.material.button.MaterialButton
@@ -181,6 +186,7 @@
                                         android:clickable="true"
                                         android:focusable="true"
                                         android:gravity="center"
+                                        android:minWidth="52dp"
                                         android:paddingStart="6dp"
                                         android:paddingEnd="6dp"
                                         android:singleLine="true"

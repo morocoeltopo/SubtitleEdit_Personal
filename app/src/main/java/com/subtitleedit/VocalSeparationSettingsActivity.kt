@@ -83,7 +83,7 @@ class VocalSeparationSettingsActivity : AppCompatActivity() {
         binding.btnSwitchDemixModel.setOnClickListener { showDemixModelPicker() }
         binding.btnSelectGeneralModel.setOnClickListener { generalModelPicker.launch(modelMimeTypes) }
         binding.btnDownloadGeneralModel.setOnClickListener { confirmGeneralModelDownload() }
-        binding.btnResetGeneralModel.setOnClickListener { resetGeneralModelSelection() }
+        binding.btnResetGeneralModel.setOnClickListener { confirmResetGeneralModelSelection() }
         binding.btnSelectVocalsModel.setOnClickListener { vocalsModelPicker.launch(modelMimeTypes) }
         binding.btnSelectDrumsModel.setOnClickListener { drumsModelPicker.launch(modelMimeTypes) }
         binding.btnSelectBassModel.setOnClickListener { bassModelPicker.launch(modelMimeTypes) }
@@ -105,6 +105,18 @@ class VocalSeparationSettingsActivity : AppCompatActivity() {
                     "约占用 158 MB 存储空间。"
             )
             .setPositiveButton("下载并导入") { _, _ -> startGeneralModelDownload() }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun confirmResetGeneralModelSelection() {
+        AlertDialog.Builder(this)
+            .setTitle("重置模型选择")
+            .setMessage(
+                "确定清除当前人声分离通用模型选择吗？\n\n" +
+                    "模型文件不会被删除，重置后需要重新选择或导入。"
+            )
+            .setPositiveButton("重置") { _, _ -> resetGeneralModelSelection() }
             .setNegativeButton("取消", null)
             .show()
     }

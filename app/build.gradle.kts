@@ -52,6 +52,7 @@ registerApkExport("release")
 android {
     namespace = "com.subtitleedit"
     compileSdk = 34
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.subtitleedit"
@@ -61,6 +62,13 @@ android {
         versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            cmake {
+                targets("model_archive_jni")
+                arguments("-DANDROID_STL=c++_static")
+            }
+        }
     }
 
     buildTypes {
@@ -94,6 +102,13 @@ android {
             // sherpa-onnx and the standalone demixing runtime both provide ORT/libc++.
             // Keep a single copy in the APK; the demixing code remains isolated at API level.
             pickFirsts += setOf("**/libonnxruntime.so", "**/libc++_shared.so")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 }

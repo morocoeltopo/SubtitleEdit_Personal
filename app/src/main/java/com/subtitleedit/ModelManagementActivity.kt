@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -16,10 +17,10 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.subtitleedit.databinding.ActivityModelManagementBinding
 import com.subtitleedit.util.ModelDownloader
@@ -216,25 +217,41 @@ class ModelManagementActivity : AppCompatActivity() {
             textSize = 12f
             setTextColor(ContextCompat.getColor(this@ModelManagementActivity, R.color.primary))
         })
-        val deleteButton = MaterialButton(
-            this,
-            null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle
-        ).apply {
+        val deleteAction = TextView(this).apply {
             text = "删除文件"
-            minimumWidth = 0
+            textSize = 14f
+            gravity = Gravity.CENTER
+            minWidth = dp(72)
+            minimumHeight = dp(40)
+            setPadding(dp(8), 0, dp(8), 0)
             setTextColor(ContextCompat.getColor(this@ModelManagementActivity, R.color.error))
-            setOnClickListener { deleteModel(item, this) }
+            isClickable = true
+            isFocusable = true
+            background = selectableItemBackgroundBorderless()
+            setOnClickListener { confirmDeleteModel(item, this) }
         }
         row.addView(details)
-        row.addView(deleteButton)
+        row.addView(deleteAction)
         card.addView(row)
         return card
     }
 
-    private fun deleteModel(item: ModelItem, button: MaterialButton) {
-        button.isEnabled = false
-        button.text = "删除中"
+    private fun confirmDeleteModel(item: ModelItem, action: TextView) {
+        AlertDialog.Builder(this)
+            .setTitle("删除模型文件")
+            .setMessage(
+                "确定永久删除“${item.displayName}”吗？\n\n" +
+                    "对应模型文件及相关模型选择将被清除，此操作无法撤销。"
+            )
+            .setPositiveButton("删除") { _, _ -> deleteModel(item, action) }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun deleteModel(item: ModelItem, action: TextView) {
+        action.isEnabled = false
+        action.alpha = 0.5f
+        action.text = "删除中"
         lifecycleScope.launch {
             val deleted = withContext(Dispatchers.IO) {
                 runCatching {
@@ -255,8 +272,9 @@ class ModelManagementActivity : AppCompatActivity() {
                 ).show()
                 loadModels()
             } else {
-                button.isEnabled = true
-                button.text = "删除文件"
+                action.isEnabled = true
+                action.alpha = 1f
+                action.text = "删除文件"
                 OverwritingToast.makeText(
                     this@ModelManagementActivity,
                     "删除失败，请检查存储权限",
@@ -324,6 +342,11 @@ class ModelManagementActivity : AppCompatActivity() {
         bytes >= 1024L * 1024L -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
         bytes >= 1024L -> String.format("%.1f KB", bytes / 1024.0)
         else -> "$bytes B"
+    }
+
+    private fun selectableItemBackgroundBorderless() = TypedValue().let { value ->
+        theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, value, true)
+        ContextCompat.getDrawable(this, value.resourceId)
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
