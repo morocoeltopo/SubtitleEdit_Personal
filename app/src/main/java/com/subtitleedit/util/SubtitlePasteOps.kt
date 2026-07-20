@@ -51,13 +51,31 @@ object SubtitlePasteOps {
         clipboardTexts: List<String>
     ): PasteToSelectionResult {
         val validPositions = selectedPositions.distinct().sorted().filter { it in entries.indices }
-        if (validPositions.size != clipboardTexts.size) {
+        if (validPositions.isEmpty() || clipboardTexts.size < validPositions.size) {
             return PasteToSelectionResult(emptySet())
         }
 
         validPositions.forEachIndexed { index, position ->
             entries[position].text = clipboardTexts[index]
         }
-        return PasteToSelectionResult(validPositions.toSet())
+
+        val affectedPositions = validPositions.toMutableSet()
+        val extraTexts = clipboardTexts.drop(validPositions.size)
+        if (extraTexts.isNotEmpty()) {
+            val lastTargetPosition = validPositions.last()
+            val insertedEntries = SubtitleEntryOps.createInsertedEntries(
+                after = true,
+                reference = entries[lastTargetPosition],
+                previous = entries[lastTargetPosition],
+                next = entries.getOrNull(lastTargetPosition + 1),
+                texts = extraTexts
+            )
+            val insertionPosition = lastTargetPosition + 1
+            entries.addAll(insertionPosition, insertedEntries)
+            affectedPositions.addAll(
+                insertionPosition until (insertionPosition + insertedEntries.size)
+            )
+        }
+        return PasteToSelectionResult(affectedPositions)
     }
 }

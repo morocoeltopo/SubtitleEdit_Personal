@@ -1,7 +1,8 @@
 # Gradle
 .gradle/
+.kotlin/
 build/
-gradle-wrapper.jar
+*.class
 
 # Local config
 local.properties
@@ -11,6 +12,9 @@ local.properties
 .cursor/
 .windsurf/
 .roo/
+.codex/
+.continue/
+.gemini/
 .aider*
 .env
 .env.*
@@ -27,10 +31,17 @@ local.properties
 .idea/caches
 .idea/modules.xml
 .idea/navEditor.xml
+.fleet/
+.settings/
+.classpath
+.project
 
 # Generated
 app/build/
 */build/
+bin/
+gen/
+out/
 
 # Logs
 *.log
@@ -40,7 +51,10 @@ app/build/
 
 # Windows
 Thumbs.db
+ehthumbs.db
 desktop.ini
+$RECYCLE.BIN/
+._*
 
 # APK files
 *.apk
@@ -50,6 +64,11 @@ desktop.ini
 # Signing files
 *.jks
 *.keystore
+*.p12
+*.pfx
+*.pem
+keystore.properties
+signing.properties
 
 # Native libraries (sherpa-onnx)
 # 保留源码和 jniLibs，但忽略下载的压缩包
@@ -61,15 +80,21 @@ app/libs/*.zip
 *.tmp
 *.temp
 *.swp
+*.swo
+*.bak
+*.rej
 *~
 
 # Captures
 captures/
 output.json
+coverage/
+*.ec
 
 # External native build
 .externalNativeBuild
 .cxx/
+.cmake/
 
 # Version control
 *.orig
@@ -79,3 +104,5 @@ output.json
 
 # Android Profiling
 *.hprof
+hs_err_pid*
+replay_pid*

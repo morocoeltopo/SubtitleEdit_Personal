@@ -1395,28 +1395,17 @@ class EditorActivity : AppCompatActivity() {
         }
         insertPosition = insertPosition.coerceIn(0, subtitleEntries.size)
 
-        val newEntry = SubtitleEntry()
-        newEntry.index = insertPosition + 1
-
-        if (after) {
-            // 向后插入：新字幕的开始时间 = 参考字幕的结束时间
-            newEntry.startTime = refEntry.endTime
-            newEntry.endTime = newEntry.startTime + 3000
-        } else {
-            // 向前插入：新字幕的结束时间 = 参考字幕的开始时间
-            newEntry.endTime = refEntry.startTime
-            newEntry.startTime = maxOf(0L, newEntry.endTime - 3000)
+        val insertedEntries = SubtitleEntryOps.createInsertedEntries(
+            after = after,
+            reference = refEntry,
+            previous = subtitleEntries.getOrNull(insertPosition - 1),
+            next = subtitleEntries.getOrNull(insertPosition),
+            texts = if (pasteAfterInsert) clipboardTexts else listOf("新字幕")
+        )
+        insertedEntries.forEachIndexed { index, entry ->
+            entry.index = insertPosition + index + 1
         }
-        newEntry.text = "新字幕"
-
-        subtitleEntries.add(insertPosition, newEntry)
-        if (pasteAfterInsert) {
-            SubtitlePasteOps.pasteAtPosition(
-                entries = subtitleEntries,
-                position = insertPosition,
-                clipboardTexts = clipboardTexts
-            )
-        }
+        subtitleEntries.addAll(insertPosition, insertedEntries)
         submitSubtitleList(
             refreshAll = true,
             syncWaveform = false,
@@ -1561,8 +1550,8 @@ class EditorActivity : AppCompatActivity() {
         val selectedEntries = requireSelectedEntries("请先选择要粘贴到的字幕") ?: return
 
         val selectedPositionsBeforeCut = selectedEntries.map { it.second }.sorted()
-        if (selectedPositionsBeforeCut.size != clipboardTexts.size) {
-            showShortToast("行数不匹配：剪贴板 ${clipboardTexts.size} 行，当前选中 ${selectedPositionsBeforeCut.size} 行")
+        if (clipboardTexts.size < selectedPositionsBeforeCut.size) {
+            showShortToast("剪贴板行数不足：剪贴板 ${clipboardTexts.size} 行，当前选中 ${selectedPositionsBeforeCut.size} 行")
             return
         }
         var selectedPositions = selectedPositionsBeforeCut

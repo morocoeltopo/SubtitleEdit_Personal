@@ -72,4 +72,44 @@ class SubtitlePasteOpsTest {
         assertEquals(listOf(200L, 400L), entries.map { it.endTime })
         assertEquals(setOf(0, 1), result.affectedPositions)
     }
+
+    @Test
+    fun selectionPasteInsertsExtraTextsAfterLastTarget() {
+        val entries = mutableListOf(
+            SubtitleEntry(startTime = 1_000L, endTime = 2_000L, text = "目标一"),
+            SubtitleEntry(startTime = 3_000L, endTime = 4_000L, text = "目标二"),
+            SubtitleEntry(startTime = 7_000L, endTime = 8_000L, text = "后一行")
+        )
+
+        val result = SubtitlePasteOps.pasteToSelection(
+            entries = entries,
+            selectedPositions = listOf(0, 1),
+            clipboardTexts = listOf("A", "B", "C")
+        )
+
+        assertEquals(listOf("A", "B", "C", "后一行"), entries.map { it.text })
+        assertEquals(3_000L, entries[1].startTime)
+        assertEquals(4_000L, entries[1].endTime)
+        assertEquals(4_000L, entries[2].startTime)
+        assertEquals(7_000L, entries[2].endTime)
+        assertEquals(setOf(0, 1, 2), result.affectedPositions)
+    }
+
+    @Test
+    fun selectionPasteCanInsertTwoExtraTextsAfterSingleTarget() {
+        val entries = mutableListOf(
+            SubtitleEntry(startTime = 1_000L, endTime = 2_000L, text = "目标"),
+            SubtitleEntry(startTime = 6_000L, endTime = 7_000L, text = "后一行")
+        )
+
+        SubtitlePasteOps.pasteToSelection(
+            entries = entries,
+            selectedPositions = listOf(0),
+            clipboardTexts = listOf("A", "B", "C")
+        )
+
+        assertEquals(listOf("A", "B", "C", "后一行"), entries.map { it.text })
+        assertEquals(listOf(2_000L, 4_000L), entries.slice(1..2).map { it.startTime })
+        assertEquals(listOf(4_000L, 6_000L), entries.slice(1..2).map { it.endTime })
+    }
 }
