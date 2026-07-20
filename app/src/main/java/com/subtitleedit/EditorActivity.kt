@@ -115,7 +115,7 @@ class EditorActivity : AppCompatActivity() {
     private var currentFormatInfo = ""
     
     // 复制/剪贴板数据（支持多行）
-    private var clipboardEntries: List<SubtitleEntry> = emptyList()
+    private var clipboardTexts: List<String> = emptyList()
     private val cutPasteController = CutPasteController()
     
     // 翻译相关
@@ -1182,28 +1182,36 @@ class EditorActivity : AppCompatActivity() {
         
         val selectedCount = subtitleAdapter.getSelectedCount()
         val hasSelection = selectedCount > 0
-        val hasClipboard = clipboardEntries.isNotEmpty()
+        val hasClipboard = clipboardTexts.isNotEmpty()
         
-        // 构建菜单项列表
+        val regularActions = mutableListOf<Pair<String, () -> Unit>>()
+        regularActions.add("时间偏移" to { showOffsetDialog(position) })
+        if (hasClipboard) {
+            regularActions.add("向前粘贴 (${clipboardTexts.size}项)" to {
+                insertSubtitle(after = false, refPosition = position, pasteAfterInsert = true)
+            })
+        }
+        regularActions.add("向前插入" to { insertSubtitle(false, position) })
+        if (hasClipboard) {
+            regularActions.add("向后粘贴 (${clipboardTexts.size}项)" to {
+                insertSubtitle(after = true, refPosition = position, pasteAfterInsert = true)
+            })
+        }
+        regularActions.add("向后插入" to { insertSubtitle(true, position) })
+        regularActions.add("复制" to { copySingle(position) })
+        regularActions.add("剪切 (粘贴后删除)" to { cutSingle(position) })
+        regularActions.add(
+            (if (hasClipboard) "粘贴 (${clipboardTexts.size}项)[当前行]" else "粘贴") to {
+                if (hasClipboard) pasteToPosition(position) else ensureClipboardNotEmpty()
+            }
+        )
+        regularActions.add("删除" to { deleteSingleSubtitle(position) })
+
         val itemsList = mutableListOf<String>()
-        
-        // 如果有选中项，添加"勾选字幕操作"选项
         if (hasSelection) {
             itemsList.add("对勾选字幕操作 (${selectedCount}项)")
         }
-        
-        // 添加常规操作（针对当前长按的字幕）
-        itemsList.add("时间偏移")
-        itemsList.add("向前插入")
-        itemsList.add("向后插入")
-        itemsList.add("复制")
-        itemsList.add("剪切 (粘贴后删除)")
-        if (hasClipboard) {
-            itemsList.add("粘贴 (${clipboardEntries.size}项)[当前行]")
-        } else {
-            itemsList.add("粘贴")
-        }
-        itemsList.add("删除")
+        itemsList.addAll(regularActions.map { it.first })
         
         val items = itemsList.toTypedArray()
         
@@ -1213,19 +1221,8 @@ class EditorActivity : AppCompatActivity() {
                     // 用户选择了"只对勾选字幕生效"，显示针对选中项的操作菜单
                     showSelectionContextMenu(hasClipboard)
                 } else {
-                    // 常规操作，索引需要调整
                     val actualWhich = if (hasSelection) which - 1 else which
-                    when (actualWhich) {
-                        0 -> showOffsetDialog(position)  // 时间偏移
-                        1 -> insertSubtitle(false, position)  // 向前插入
-                        2 -> insertSubtitle(true, position)  // 向后插入
-                        3 -> copySingle(position)  // 复制
-                        4 -> cutSingle(position)  // 剪切
-                        5 -> if (hasClipboard) pasteToPosition(position) else {  // 粘贴
-                            ensureClipboardNotEmpty()
-                        }
-                        6 -> deleteSingleSubtitle(position)  // 删除
-                    }
+                    regularActions.getOrNull(actualWhich)?.second?.invoke()
                 }
             }
             .show()
@@ -1243,7 +1240,7 @@ class EditorActivity : AppCompatActivity() {
         itemsList.add("复制")
         itemsList.add("剪切 (粘贴后删除)")
         if (hasClipboard) {
-            itemsList.add("粘贴 (${clipboardEntries.size}项)")
+            itemsList.add("粘贴 (${clipboardTexts.size}项)")
         } else {
             itemsList.add("粘贴")
         }
@@ -1275,7 +1272,7 @@ class EditorActivity : AppCompatActivity() {
         if (isSourceViewMode) return
         
         if (position >= 0 && position < subtitleEntries.size) {
-            clipboardEntries = listOf(SubtitleEntryOps.deepCopy(subtitleEntries[position]))
+            clipboardTexts = listOf(subtitleEntries[position].text)
             cutPasteController.clear()
             com.subtitleedit.util.OverwritingToast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
         }
@@ -1289,7 +1286,7 @@ class EditorActivity : AppCompatActivity() {
         
         if (position >= 0 && position < subtitleEntries.size) {
             // 先保存到剪贴板
-            clipboardEntries = listOf(SubtitleEntryOps.deepCopy(subtitleEntries[position]))
+            clipboardTexts = listOf(subtitleEntries[position].text)
             cutPasteController.markSingleCut(position)
             com.subtitleedit.util.OverwritingToast.makeText(this, "已剪切", Toast.LENGTH_SHORT).show()
         }
@@ -1303,9 +1300,9 @@ class EditorActivity : AppCompatActivity() {
         
         val selectedEntries = requireSelectedEntries("请先选择要剪切的字幕") ?: return
         
-        clipboardEntries = SubtitleEntryOps.deepCopy(selectedEntries.map { it.first })
+        clipboardTexts = selectedEntries.map { it.first.text }
         cutPasteController.markMultiCut(selectedEntries.map { it.second })
-        com.subtitleedit.util.OverwritingToast.makeText(this, "已剪切 ${clipboardEntries.size} 项", Toast.LENGTH_SHORT).show()
+        com.subtitleedit.util.OverwritingToast.makeText(this, "已剪切 ${clipboardTexts.size} 项", Toast.LENGTH_SHORT).show()
     }
     
     /**
@@ -1333,6 +1330,7 @@ class EditorActivity : AppCompatActivity() {
         if (!ensureClipboardNotEmpty()) return
 
         if (position >= 0 && position < subtitleEntries.size) {
+            val targetSnapshot = SubtitleEntryOps.deepCopy(subtitleEntries[position])
             var targetPosition = position
             // 如果是剪切模式，先删除原字幕
             if (cutPasteController.hasPendingCut()) {
@@ -1341,21 +1339,19 @@ class EditorActivity : AppCompatActivity() {
             }
 
             if (subtitleEntries.isEmpty()) {
-                setSubtitleEntries(SubtitleEntryOps.deepCopy(clipboardEntries))
-                submitSubtitleList(refreshAll = true, markChanged = true)
-                com.subtitleedit.util.OverwritingToast.makeText(this, "已粘贴 ${clipboardEntries.size} 项", Toast.LENGTH_SHORT).show()
-                return
+                subtitleEntries.add(targetSnapshot)
+                targetPosition = 0
             }
             targetPosition = targetPosition.coerceIn(0, subtitleEntries.lastIndex)
 
             val pasteResult = SubtitlePasteOps.pasteAtPosition(
                 entries = subtitleEntries,
                 position = targetPosition,
-                clipboardEntries = clipboardEntries
+                clipboardTexts = clipboardTexts
             )
             if (pasteResult.structureChanged) {
                 submitSubtitleList(refreshAll = true, markChanged = true)
-                com.subtitleedit.util.OverwritingToast.makeText(this, "已粘贴 ${clipboardEntries.size} 项", Toast.LENGTH_SHORT).show()
+                com.subtitleedit.util.OverwritingToast.makeText(this, "已粘贴 ${clipboardTexts.size} 项", Toast.LENGTH_SHORT).show()
             } else {
                 notifyEntriesChanged(pasteResult.affectedPositions)
                 com.subtitleedit.util.OverwritingToast.makeText(this, "已粘贴", Toast.LENGTH_SHORT).show()
@@ -1381,30 +1377,46 @@ class EditorActivity : AppCompatActivity() {
     /**
      * 插入字幕到指定位置
      */
-    private fun insertSubtitle(after: Boolean, refPosition: Int) {
+    private fun insertSubtitle(
+        after: Boolean,
+        refPosition: Int,
+        pasteAfterInsert: Boolean = false
+    ) {
         if (!ensureListMode()) return
+        if (refPosition !in subtitleEntries.indices) return
+        if (pasteAfterInsert && !ensureClipboardNotEmpty()) return
 
-        val insertPosition = if (after) refPosition + 1 else refPosition
+        // 剪切粘贴会删除来源行，先保留参考行时间并修正插入位置。
+        val refEntry = SubtitleEntryOps.deepCopy(subtitleEntries[refPosition])
+        var insertPosition = if (after) refPosition + 1 else refPosition
+        if (pasteAfterInsert && cutPasteController.hasPendingCut()) {
+            insertPosition = cutPasteController.adjustPastePositionAfterCut(insertPosition)
+            performCutDelete()
+        }
+        insertPosition = insertPosition.coerceIn(0, subtitleEntries.size)
 
         val newEntry = SubtitleEntry()
         newEntry.index = insertPosition + 1
 
-        if (subtitleEntries.isNotEmpty() && refPosition < subtitleEntries.size) {
-            val refEntry = subtitleEntries[refPosition]
-            if (after) {
-                // 向后插入：新字幕的开始时间 = 参考字幕的结束时间
-                newEntry.startTime = refEntry.endTime
-                newEntry.endTime = newEntry.startTime + 3000
-            } else {
-                // 向前插入：新字幕的结束时间 = 参考字幕的开始时间
-                newEntry.endTime = refEntry.startTime
-                newEntry.startTime = maxOf(0L, newEntry.endTime - 3000)
-            }
+        if (after) {
+            // 向后插入：新字幕的开始时间 = 参考字幕的结束时间
+            newEntry.startTime = refEntry.endTime
+            newEntry.endTime = newEntry.startTime + 3000
+        } else {
+            // 向前插入：新字幕的结束时间 = 参考字幕的开始时间
+            newEntry.endTime = refEntry.startTime
+            newEntry.startTime = maxOf(0L, newEntry.endTime - 3000)
         }
-
         newEntry.text = "新字幕"
 
         subtitleEntries.add(insertPosition, newEntry)
+        if (pasteAfterInsert) {
+            SubtitlePasteOps.pasteAtPosition(
+                entries = subtitleEntries,
+                position = insertPosition,
+                clipboardTexts = clipboardTexts
+            )
+        }
         submitSubtitleList(
             refreshAll = true,
             syncWaveform = false,
@@ -1414,7 +1426,12 @@ class EditorActivity : AppCompatActivity() {
             updateSelectedCountDisplay()
         }
         setWaveformSubtitlesKeepSelection(insertPosition)
-        com.subtitleedit.util.OverwritingToast.makeText(this, "已插入新字幕", Toast.LENGTH_SHORT).show()
+        val message = if (pasteAfterInsert) {
+            "已${if (after) "向后" else "向前"}粘贴 ${clipboardTexts.size} 项"
+        } else {
+            "已插入新字幕"
+        }
+        com.subtitleedit.util.OverwritingToast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
     private fun insertSubtitleFromTimestamp(startMs: Long, endMs: Long) {
@@ -1528,9 +1545,9 @@ class EditorActivity : AppCompatActivity() {
         
         val selectedEntries = requireSelectedEntries("请先选择要复制的字幕") ?: return
         
-        clipboardEntries = SubtitleEntryOps.deepCopy(selectedEntries.map { it.first })
+        clipboardTexts = selectedEntries.map { it.first.text }
         cutPasteController.clear()
-        com.subtitleedit.util.OverwritingToast.makeText(this, "已复制 ${clipboardEntries.size} 项", Toast.LENGTH_SHORT).show()
+        com.subtitleedit.util.OverwritingToast.makeText(this, "已复制 ${clipboardTexts.size} 项", Toast.LENGTH_SHORT).show()
     }
     
     /**
@@ -1544,11 +1561,19 @@ class EditorActivity : AppCompatActivity() {
         val selectedEntries = requireSelectedEntries("请先选择要粘贴到的字幕") ?: return
 
         val selectedPositionsBeforeCut = selectedEntries.map { it.second }.sorted()
+        if (selectedPositionsBeforeCut.size != clipboardTexts.size) {
+            showShortToast("行数不匹配：剪贴板 ${clipboardTexts.size} 行，当前选中 ${selectedPositionsBeforeCut.size} 行")
+            return
+        }
         var selectedPositions = selectedPositionsBeforeCut
 
         // 如果是剪切模式，先删除原字幕，并同步调整目标选中位置
         if (cutPasteController.hasPendingCut()) {
             val deletedIndices = cutPasteController.snapshotDeletedIndices()
+            if (selectedPositionsBeforeCut.any { it in deletedIndices }) {
+                showShortToast("剪切来源不能同时作为粘贴目标")
+                return
+            }
             selectedPositions = selectedPositionsBeforeCut
                 .map { pos -> pos - deletedIndices.count { it < pos } }
                 .filter { it >= 0 }
@@ -1560,21 +1585,18 @@ class EditorActivity : AppCompatActivity() {
             return
         }
 
-        val insertionPosition = selectedPositions.first().coerceIn(0, subtitleEntries.size)
-
-        val replaceResult = SubtitlePasteOps.replaceSelectionWithClipboard(
+        val pasteResult = SubtitlePasteOps.pasteToSelection(
             entries = subtitleEntries,
             selectedPositions = selectedPositions,
-            insertionPosition = insertionPosition,
-            clipboardEntries = clipboardEntries
+            clipboardTexts = clipboardTexts
         )
 
         submitSubtitleList(
             refreshAll = true,
-            selectedIndices = replaceResult.insertedPositions,
+            selectedIndices = pasteResult.affectedPositions,
             markChanged = true
         )
-        com.subtitleedit.util.OverwritingToast.makeText(this, "已粘贴 ${clipboardEntries.size} 项", Toast.LENGTH_SHORT).show()
+        com.subtitleedit.util.OverwritingToast.makeText(this, "已粘贴 ${clipboardTexts.size} 项", Toast.LENGTH_SHORT).show()
     }
     
     private fun markAsChanged() {
@@ -2476,7 +2498,7 @@ class EditorActivity : AppCompatActivity() {
     }
 
     private fun ensureClipboardNotEmpty(): Boolean {
-        if (clipboardEntries.isNotEmpty()) return true
+        if (clipboardTexts.isNotEmpty()) return true
         showShortToast("剪贴板为空，请先复制")
         return false
     }

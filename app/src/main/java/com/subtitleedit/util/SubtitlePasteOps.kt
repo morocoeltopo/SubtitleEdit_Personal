@@ -8,55 +8,56 @@ object SubtitlePasteOps {
         val affectedPositions: Set<Int>
     )
 
-    data class ReplaceSelectionResult(
-        val insertedPositions: Set<Int>
+    data class PasteToSelectionResult(
+        val affectedPositions: Set<Int>
     )
 
     fun pasteAtPosition(
         entries: MutableList<SubtitleEntry>,
         position: Int,
-        clipboardEntries: List<SubtitleEntry>
+        clipboardTexts: List<String>
     ): PasteAtPositionResult {
-        if (clipboardEntries.isEmpty()) {
+        if (clipboardTexts.isEmpty() || position !in entries.indices) {
             return PasteAtPositionResult(structureChanged = false, affectedPositions = emptySet())
         }
 
-        if (clipboardEntries.size == 1) {
-            SubtitleEntryOps.copyContent(clipboardEntries.first(), entries[position])
+        entries[position].text = clipboardTexts.first()
+        if (clipboardTexts.size == 1) {
             return PasteAtPositionResult(
                 structureChanged = false,
                 affectedPositions = setOf(position)
             )
         }
 
-        // 多行策略：覆盖当前位置一行，剩余插入到后面
-        entries[position] = SubtitleEntryOps.deepCopy(clipboardEntries.first())
-        for (i in 1 until clipboardEntries.size) {
-            entries.add(position + i, SubtitleEntryOps.deepCopy(clipboardEntries[i]))
+        // 多出的文本按“向后插入”规则创建目标行，时间不从剪贴板读取。
+        for (i in 1 until clipboardTexts.size) {
+            val previous = entries[position + i - 1]
+            entries.add(
+                position + i,
+                SubtitleEntry(
+                    startTime = previous.endTime,
+                    endTime = previous.endTime + 3_000L,
+                    text = clipboardTexts[i]
+                )
+            )
         }
-        val affected = (position until (position + clipboardEntries.size)).toSet()
+        val affected = (position until (position + clipboardTexts.size)).toSet()
         return PasteAtPositionResult(structureChanged = true, affectedPositions = affected)
     }
 
-    fun replaceSelectionWithClipboard(
+    fun pasteToSelection(
         entries: MutableList<SubtitleEntry>,
         selectedPositions: List<Int>,
-        insertionPosition: Int,
-        clipboardEntries: List<SubtitleEntry>
-    ): ReplaceSelectionResult {
-        selectedPositions.sortedDescending().forEach { position ->
-            if (position in entries.indices) {
-                entries.removeAt(position)
-            }
+        clipboardTexts: List<String>
+    ): PasteToSelectionResult {
+        val validPositions = selectedPositions.distinct().sorted().filter { it in entries.indices }
+        if (validPositions.size != clipboardTexts.size) {
+            return PasteToSelectionResult(emptySet())
         }
 
-        val insertedPositions = mutableSetOf<Int>()
-        clipboardEntries.forEachIndexed { index, sourceEntry ->
-            val insertAt = (insertionPosition + index).coerceIn(0, entries.size)
-            entries.add(insertAt, SubtitleEntryOps.deepCopy(sourceEntry))
-            insertedPositions.add(insertAt)
+        validPositions.forEachIndexed { index, position ->
+            entries[position].text = clipboardTexts[index]
         }
-        return ReplaceSelectionResult(insertedPositions)
+        return PasteToSelectionResult(validPositions.toSet())
     }
 }
-
