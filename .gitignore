@@ -43,6 +43,12 @@ bin/
 gen/
 out/
 
+# Tests
+**/src/test/
+**/src/androidTest/
+test-results/
+reports/
+
 # Logs
 *.log
 

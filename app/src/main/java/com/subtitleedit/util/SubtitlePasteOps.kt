@@ -29,18 +29,15 @@ object SubtitlePasteOps {
             )
         }
 
-        // 多出的文本按“向后插入”规则创建目标行，时间不从剪贴板读取。
-        for (i in 1 until clipboardTexts.size) {
-            val previous = entries[position + i - 1]
-            entries.add(
-                position + i,
-                SubtitleEntry(
-                    startTime = previous.endTime,
-                    endTime = previous.endTime + 3_000L,
-                    text = clipboardTexts[i]
-                )
-            )
-        }
+        // 多出的文本统一复用“向后粘贴”的整组时间分配规则。
+        val insertedEntries = SubtitleEntryOps.createInsertedEntries(
+            after = true,
+            reference = entries[position],
+            previous = entries[position],
+            next = entries.getOrNull(position + 1),
+            texts = clipboardTexts.drop(1)
+        )
+        entries.addAll(position + 1, insertedEntries)
         val affected = (position until (position + clipboardTexts.size)).toSet()
         return PasteAtPositionResult(structureChanged = true, affectedPositions = affected)
     }
