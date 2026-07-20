@@ -67,6 +67,14 @@ class WaveformTimelineView @JvmOverloads constructor(
         /** 默认视图：显示 3 分钟 */
         private const val DEFAULT_VISIBLE_MS = 180_000L
 
+        /**
+         * 字幕块单击的短确认延迟。
+         *
+         * 系统 onSingleTapConfirmed 需要等待完整双击窗口（通常约 300ms），
+         * 对单点选中反馈偏慢；120ms 仍给双击手势留出取消机会，同时更接近即时响应。
+         */
+        private const val SINGLE_TAP_SELECTION_DELAY_MS = 120L
+
         /** 重新请求高精度的阈值：现有精度低于目标的 60% 时触发 */
         private const val RESAMPLE_THRESHOLD = 0.6f
 
@@ -112,6 +120,7 @@ class WaveformTimelineView @JvmOverloads constructor(
     private var pinchStartVisibleDurationMs = 0L
     private var pinchAnchorTimeMs = 0L
     private var suppressTapSelection = false
+    private var pendingSingleTapSelection: Runnable? = null
 
     // ==================== Bitmap 缓存 ====================
 
@@ -173,6 +182,7 @@ class WaveformTimelineView @JvmOverloads constructor(
     var onDraggedViewportPlayheadCorrection: ((positionMs: Long) -> Unit)? = null
     var onLimitedPlaybackRangeChange: ((subtitleIndex: Int?) -> Unit)? = null
     var onLimitedPlaybackStartRequest: ((subtitleIndex: Int) -> Unit)? = null
+    var onSubtitleStartSeekRequest: ((positionMs: Long) -> Unit)? = null
     var onLimitedPlaybackRangeOutOfView: (() -> Unit)? = null
 
     // ==================== 打轴模式 ====================
@@ -304,26 +314,26 @@ class WaveformTimelineView @JvmOverloads constructor(
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean = true
 
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
                 if (suppressTapSelection) {
                     suppressTapSelection = false
                     return true
                 }
-                val subtitleIndex = findSubtitleIndex(e.x, e.y)
-                if (subtitleIndex >= 0) {
-                    if (subtitleIndex in selectedIndices) clearSelection() else selectSubtitle(subtitleIndex)
-                } else {
-                    if (isInSubtitleArea(e.y)) clearSelection()
-                    val t = xToTime(e.x)
-                    onTimelineClickListener?.invoke(t.toFloat() / durationMs)
-                }
+                scheduleSingleTap(e.x, e.y)
                 return true
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
+                cancelPendingSingleTap()
                 val subtitleIndex = findSubtitleIndex(e.x, e.y)
-                if (subtitleIndex >= 0 && subtitleIndex == limitedPlaybackIndex) {
-                    onLimitedPlaybackStartRequest?.invoke(subtitleIndex)
+                if (subtitleIndex >= 0) {
+                    if (subtitleIndex == limitedPlaybackIndex) {
+                        onLimitedPlaybackStartRequest?.invoke(subtitleIndex)
+                    } else {
+                        subtitles.getOrNull(subtitleIndex)?.let { subtitle ->
+                            onSubtitleStartSeekRequest?.invoke(subtitle.startTime)
+                        }
+                    }
                 }
                 return true
             }
@@ -349,6 +359,7 @@ class WaveformTimelineView @JvmOverloads constructor(
     // ==================== 生命周期 ====================
 
     fun release() {
+        cancelPendingSingleTap()
         waveformCache?.recycle()
         waveformCache = null
         spectrogramChunks.forEach { it?.recycle() }
@@ -1189,6 +1200,28 @@ class WaveformTimelineView @JvmOverloads constructor(
         selectedIndices = emptySet()
         onSelectedIndicesChangeListener?.invoke(selectedIndices)
         invalidate()
+    }
+
+    private fun scheduleSingleTap(x: Float, y: Float) {
+        cancelPendingSingleTap()
+        val action = Runnable {
+            pendingSingleTapSelection = null
+            val subtitleIndex = findSubtitleIndex(x, y)
+            if (subtitleIndex >= 0) {
+                if (subtitleIndex in selectedIndices) clearSelection() else selectSubtitle(subtitleIndex)
+            } else {
+                if (isInSubtitleArea(y)) clearSelection()
+                val t = xToTime(x)
+                onTimelineClickListener?.invoke(t.toFloat() / durationMs)
+            }
+        }
+        pendingSingleTapSelection = action
+        postDelayed(action, SINGLE_TAP_SELECTION_DELAY_MS)
+    }
+
+    private fun cancelPendingSingleTap() {
+        pendingSingleTapSelection?.let(::removeCallbacks)
+        pendingSingleTapSelection = null
     }
 
     private fun findSubtitle(x: Float): SubtitleEntry? {

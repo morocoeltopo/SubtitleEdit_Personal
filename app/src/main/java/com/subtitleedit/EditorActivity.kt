@@ -2762,6 +2762,10 @@ class EditorActivity : AppCompatActivity() {
         binding.waveformTimelineView.onLimitedPlaybackStartRequest = { subtitleIndex ->
             startLimitedRangePlayback(subtitleIndex)
         }
+        binding.waveformTimelineView.onSubtitleStartSeekRequest = { positionMs ->
+            // 双击未限定的字幕块只移动播放头，保持当前播放/暂停状态。
+            seekTo(positionMs)
+        }
         binding.waveformTimelineView.onLimitedPlaybackRangeOutOfView = {
             if (isLimitedRangePlaybackActive) {
                 isLimitedRangePlaybackActive = false
