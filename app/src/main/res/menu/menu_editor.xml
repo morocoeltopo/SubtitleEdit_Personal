@@ -47,10 +47,6 @@
                 android:title="@string/menu_source_view"
                 app:showAsAction="never" />
             <item
-                android:id="@+id/menu_cancel_selection"
-                android:title="@string/menu_cancel_selection"
-                app:showAsAction="never" />
-            <item
                 android:id="@+id/menu_select_range"
                 android:title="@string/menu_select_range"
                 app:showAsAction="never" />

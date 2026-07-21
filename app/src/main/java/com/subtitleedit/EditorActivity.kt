@@ -281,6 +281,8 @@ class EditorActivity : AppCompatActivity() {
         const val EXTRA_FILE_PATH = "extra_file_path"
         const val EXTRA_IS_AUDIO_FILE = "extra_is_audio_file"
         const val EXTRA_SUBTITLE_FILE_PATH = "extra_subtitle_file_path"
+        private const val MENU_SELECT_ALL = 0x20001
+        private const val MENU_SELECT_RANGE = 0x20002
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -329,7 +331,11 @@ class EditorActivity : AppCompatActivity() {
         supportActionBar?.title = "未命名"
         
         binding.toolbar.setNavigationOnClickListener {
-            handleBackPressed()
+            if (subtitleAdapter.getSelectedCount() > 0) {
+                cancelSelection()
+            } else {
+                handleBackPressed()
+            }
         }
         
         binding.toolbar.setOnMenuItemClickListener { menuItem ->
@@ -337,8 +343,24 @@ class EditorActivity : AppCompatActivity() {
         }
     }
     
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_editor, menu)
+    override fun onCreateOptionsMenu(menu: Menu): Boolean = true
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.clear()
+        if (::subtitleAdapter.isInitialized && subtitleAdapter.getSelectedCount() > 0) {
+            menu.add(Menu.NONE, MENU_SELECT_ALL, 0, "全选")
+                .setIcon(R.drawable.ic_select_all)
+                .setContentDescription("全选")
+                .setTooltipText("全选")
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(Menu.NONE, MENU_SELECT_RANGE, 1, "区间选择")
+                .setIcon(R.drawable.ic_select_range)
+                .setContentDescription("区间选择")
+                .setTooltipText("区间选择")
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        } else {
+            menuInflater.inflate(R.menu.menu_editor, menu)
+        }
         return true
     }
     
@@ -372,8 +394,12 @@ class EditorActivity : AppCompatActivity() {
                 showSearchBar()
                 true
             }
-            R.id.menu_cancel_selection -> {
-                cancelSelection()
+            MENU_SELECT_ALL -> {
+                selectAllSubtitles()
+                true
+            }
+            MENU_SELECT_RANGE -> {
+                selectRangeBetweenSelectedSubtitles()
                 true
             }
             R.id.menu_select_range -> {
@@ -874,6 +900,13 @@ class EditorActivity : AppCompatActivity() {
         } else {
             supportActionBar?.subtitle = currentFormatInfo
         }
+        binding.toolbar.navigationIcon = ContextCompat.getDrawable(
+            this,
+            if (count > 0) R.drawable.ic_close else R.drawable.ic_back
+        )
+        binding.toolbar.navigationContentDescription =
+            if (count > 0) "取消选择" else "返回"
+        invalidateOptionsMenu()
     }
     
     private fun loadFile() {
@@ -1818,10 +1851,9 @@ class EditorActivity : AppCompatActivity() {
                 val actualStart = minOf(startIndex, endIndex)
                 val actualEnd = maxOf(startIndex, endIndex)
                 
-                // 选中范围内的所有条目
-                for (i in actualStart..actualEnd) {
-                    subtitleAdapter.toggleSelection(i)
-                }
+                // 保留已有选择，并一次性加入区间，避免逐项切换工具栏状态。
+                val selectedIndices = subtitleAdapter.getSelectedPositions() + (actualStart..actualEnd)
+                subtitleAdapter.setSelectionByIndices(selectedIndices)
                 updateSelectedCountDisplay()
                 showShortToast("已选择第 $start 到 $end 条字幕")
             }
@@ -2013,7 +2045,32 @@ class EditorActivity : AppCompatActivity() {
         
         subtitleAdapter.clearSelection()
         updateSelectedCountDisplay()
-        showShortToast("已取消选择")
+    }
+
+    private fun selectAllSubtitles() {
+        if (!ensureListMode() || subtitleEntries.isEmpty()) return
+
+        if (subtitleAdapter.getSelectedCount() == subtitleEntries.size) {
+            subtitleAdapter.clearSelection()
+        } else {
+            subtitleAdapter.setSelectionByIndices(subtitleEntries.indices.toSet())
+        }
+        updateSelectedCountDisplay()
+    }
+
+    private fun selectRangeBetweenSelectedSubtitles() {
+        if (!ensureListMode()) return
+
+        val selectedPositions = subtitleAdapter.getSelectedPositions().sorted()
+        if (selectedPositions.size != 2) {
+            showShortToast("请先选择两行字幕作为区间端点")
+            return
+        }
+
+        subtitleAdapter.setSelectionByIndices(
+            (selectedPositions.first()..selectedPositions.last()).toSet()
+        )
+        updateSelectedCountDisplay()
     }
     
     /**
@@ -2603,6 +2660,10 @@ class EditorActivity : AppCompatActivity() {
     }
 
     private fun handleBackPressed() {
+        if (::subtitleAdapter.isInitialized && subtitleAdapter.getSelectedCount() > 0) {
+            cancelSelection()
+            return
+        }
         if (hasUnsavedChanges) {
             AlertDialog.Builder(this)
                 .setTitle("提示")

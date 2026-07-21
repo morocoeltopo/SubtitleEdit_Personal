@@ -45,7 +45,6 @@
     <string name="menu_save_as">另存为</string>
     <string name="menu_undo">撤销</string>
     <string name="menu_redo">重做</string>
-    <string name="menu_cancel_selection">取消选择</string>
     <string name="menu_select_range">快速选择</string>
     <string name="menu_source_view">切换视图</string>
     <string name="menu_search">搜索</string>
