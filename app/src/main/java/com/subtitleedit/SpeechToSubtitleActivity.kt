@@ -66,20 +66,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
     )
 
     // 语言选项
-    private val languageOptions = listOf(
-        "自动检测",
-        "中文",
-        "英语",
-        "日语",
-        "韩语",
-        "法语",
-        "德语",
-        "西班牙语",
-        "俄语",
-        "葡萄牙语",
-        "意大利语",
-        "土耳其语"
-    )
+    private val languageOptions = SettingsManager.TRANSCRIPTION_LANGUAGE_OPTIONS
 
     // 输出格式选项
     private val formatOptions = listOf(

@@ -18,6 +18,7 @@
             android:layout_width="match_parent"
             android:layout_height="48dp"
             app:navigationIcon="@drawable/ic_back"
+            app:titleMarginEnd="0dp"
             app:titleTextAppearance="@style/TextAppearance.Material3.TitleSmall"
             app:subtitleTextAppearance="@style/TextAppearance.Material3.LabelSmall" />
 

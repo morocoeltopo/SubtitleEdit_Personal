@@ -44,6 +44,7 @@ class SettingsManager private constructor(context: Context) {
         private const val KEY_STT_HOTWORDS_ENABLED = "stt_hotwords_enabled"
         private const val KEY_STT_HOTWORDS = "stt_hotwords"
         private const val KEY_STT_HOTWORDS_SCORE = "stt_hotwords_score"
+        private const val KEY_QUICK_TRANSCRIBE_SOURCE_LANGUAGE = "quick_transcribe_source_language"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_TTS_ENGINE = "tts_engine"
         private const val KEY_TTS_LANGUAGE = "tts_language"
@@ -65,6 +66,21 @@ class SettingsManager private constructor(context: Context) {
 
         const val ASR_MODEL_WHISPER = "whisper"
         const val ASR_MODEL_SENSEVOICE = "sensevoice"
+
+        val TRANSCRIPTION_LANGUAGE_OPTIONS = listOf(
+            "自动检测",
+            "中文",
+            "英语",
+            "日语",
+            "韩语",
+            "法语",
+            "德语",
+            "西班牙语",
+            "俄语",
+            "葡萄牙语",
+            "意大利语",
+            "土耳其语"
+        )
 
         const val DEMIX_MODEL_GENERAL = "general"
         const val DEMIX_MODEL_FT = "ft"
@@ -428,6 +444,16 @@ class SettingsManager private constructor(context: Context) {
 
     fun setSpeechHotwordsScore(score: Float) {
         prefs.edit().putFloat(KEY_STT_HOTWORDS_SCORE, score.coerceIn(0.5f, 5.0f)).apply()
+    }
+
+    fun getQuickTranscribeSourceLanguage(): String =
+        prefs.getString(KEY_QUICK_TRANSCRIBE_SOURCE_LANGUAGE, "自动检测")
+            ?.takeIf { it in TRANSCRIPTION_LANGUAGE_OPTIONS }
+            ?: "自动检测"
+
+    fun setQuickTranscribeSourceLanguage(language: String) {
+        require(language in TRANSCRIPTION_LANGUAGE_OPTIONS)
+        prefs.edit().putString(KEY_QUICK_TRANSCRIBE_SOURCE_LANGUAGE, language).apply()
     }
 
     fun getThemeMode(): String {

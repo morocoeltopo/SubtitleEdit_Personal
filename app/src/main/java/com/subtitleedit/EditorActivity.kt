@@ -22,6 +22,7 @@ import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.ArrayAdapter
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -896,7 +897,8 @@ class EditorActivity : AppCompatActivity() {
     private fun updateSelectedCountDisplay() {
         val count = subtitleAdapter.getSelectedCount()
         if (count > 0) {
-            supportActionBar?.subtitle = "$currentFormatInfo | 选中：$count"
+            val formatName = getFormatDisplayName(currentFormat)
+            supportActionBar?.subtitle = "$formatName | ${subtitleEntries.size} 条 | 选中：$count"
         } else {
             supportActionBar?.subtitle = currentFormatInfo
         }
@@ -2062,14 +2064,17 @@ class EditorActivity : AppCompatActivity() {
         if (!ensureListMode()) return
 
         val selectedPositions = subtitleAdapter.getSelectedPositions().sorted()
-        if (selectedPositions.size != 2) {
-            showShortToast("请先选择两行字幕作为区间端点")
+        if (selectedPositions.size < 2) {
+            showShortToast("请先选择至少两行字幕")
             return
         }
 
-        subtitleAdapter.setSelectionByIndices(
-            (selectedPositions.first()..selectedPositions.last()).toSet()
-        )
+        val start = selectedPositions.first()
+        val end = selectedPositions.last()
+        val range = (start..end).toSet()
+        if (range.all { it in selectedPositions }) return
+
+        subtitleAdapter.setSelectionByIndices(range)
         updateSelectedCountDisplay()
     }
     
@@ -2291,6 +2296,7 @@ class EditorActivity : AppCompatActivity() {
 
         val settings = SettingsManager.getInstance(this)
         val modelType = settings.getAsrModelType()
+        val sourceLanguage = settings.getQuickTranscribeSourceLanguage()
         val encoderPath: String
         val decoderPath: String
         val tokensPath: String
@@ -2310,14 +2316,66 @@ class EditorActivity : AppCompatActivity() {
             return
         }
 
+        val (dialogView, languageSpinner) =
+            createQuickTranscribeLanguageView(selectedEntries.size, sourceLanguage)
         AlertDialog.Builder(this)
             .setTitle("快速转录")
-            .setMessage("将识别选中的 ${selectedEntries.size} 条字幕对应音频，并在预览中确认后应用。")
+            .setView(dialogView)
             .setPositiveButton("开始转录") { _, _ ->
-                startQuickTranscription(selectedEntries, encoderPath, decoderPath, tokensPath, modelType)
+                val selectedLanguage = SettingsManager.TRANSCRIPTION_LANGUAGE_OPTIONS[
+                    languageSpinner.selectedItemPosition.coerceIn(
+                        0,
+                        SettingsManager.TRANSCRIPTION_LANGUAGE_OPTIONS.lastIndex
+                    )
+                ]
+                settings.setQuickTranscribeSourceLanguage(selectedLanguage)
+                startQuickTranscription(
+                    selectedEntries,
+                    encoderPath,
+                    decoderPath,
+                    tokensPath,
+                    modelType,
+                    selectedLanguage
+                )
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun createQuickTranscribeLanguageView(
+        selectedCount: Int,
+        sourceLanguage: String
+    ): Pair<LinearLayout, android.widget.Spinner> {
+        val horizontalPadding = (16 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(horizontalPadding, 0, horizontalPadding, 0)
+        }
+        val summary = TextView(this).apply {
+            text = "将识别选中的 $selectedCount 条字幕对应音频，并在预览中确认后应用。"
+            textSize = 14f
+        }
+        val label = TextView(this).apply {
+            text = "源语言"
+            textSize = 14f
+            setPadding(0, 24, 0, 0)
+        }
+        val spinner = android.widget.Spinner(this).apply {
+            val adapter = ArrayAdapter(
+                this@EditorActivity,
+                android.R.layout.simple_spinner_item,
+                SettingsManager.TRANSCRIPTION_LANGUAGE_OPTIONS
+            )
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            this.adapter = adapter
+            setSelection(
+                SettingsManager.TRANSCRIPTION_LANGUAGE_OPTIONS.indexOf(sourceLanguage).coerceAtLeast(0)
+            )
+        }
+        container.addView(summary)
+        container.addView(label)
+        container.addView(spinner)
+        return container to spinner
     }
 
     private fun startQuickTranscription(
@@ -2325,7 +2383,8 @@ class EditorActivity : AppCompatActivity() {
         encoderPath: String,
         decoderPath: String,
         tokensPath: String,
-        modelType: String
+        modelType: String,
+        sourceLanguage: String
     ) {
         val inputFile = currentFile ?: return
         val progressDialog = AlertDialog.Builder(this)
@@ -2352,7 +2411,7 @@ class EditorActivity : AppCompatActivity() {
                     decoderPath = decoderPath,
                     tokensPath = tokensPath,
                     useVad = false,
-                    language = "自动检测",
+                    language = sourceLanguage,
                     contentResolver = contentResolver,
                     context = this@EditorActivity,
                     modelType = modelType
