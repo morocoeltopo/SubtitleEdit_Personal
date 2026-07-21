@@ -115,6 +115,9 @@ class WaveformTimelineView @JvmOverloads constructor(
     private var dragStartVisibleStartMs = 0L
     private var downOnSelectedSubtitle = false  // ACTION_DOWN 时是否点在已选中字幕上
     private var activePointerId = MotionEvent.INVALID_POINTER_ID
+    private var lastActiveTouchX = 0f
+    /** 打轴由另一根手指启动时，避免原有波形触摸序列在退出打轴后继续触发拖动或点击。 */
+    private var discardTouchSequenceAfterTimestamping = false
     private var isPinching = false
     private var pinchStartSpan = 0f
     private var pinchStartVisibleDurationMs = 0L
@@ -935,12 +938,22 @@ class WaveformTimelineView @JvmOverloads constructor(
     private fun isInSubtitleArea(y: Float) = y >= subtitleTrackY() && y <= height.toFloat()
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!isTimestampingMode && discardTouchSequenceAfterTimestamping) {
+            if (event.actionMasked == MotionEvent.ACTION_UP ||
+                event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                discardTouchSequenceAfterTimestamping = false
+                activePointerId = MotionEvent.INVALID_POINTER_ID
+            }
+            return true
+        }
+
         // 打轴模式：允许视口进入音频两端的虚拟缓冲区，便于从边界向外打轴。
         if (isTimestampingMode) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     activePointerId = event.getPointerId(0)
                     lastTouchXForTimestamp = event.x
+                    lastActiveTouchX = event.x
                 }
                 MotionEvent.ACTION_MOVE -> {
                     // 多指期间不把任意一根手指的移动误判为时间轴拖动。
@@ -956,6 +969,7 @@ class WaveformTimelineView @JvmOverloads constructor(
                         maxOf(0L, durationMs - visibleDurationMs) + virtualPaddingMs
                     )
                     lastTouchXForTimestamp = touchX
+                    lastActiveTouchX = touchX
                     invalidate()
                 }
                 MotionEvent.ACTION_POINTER_UP -> {
@@ -963,6 +977,7 @@ class WaveformTimelineView @JvmOverloads constructor(
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     activePointerId = MotionEvent.INVALID_POINTER_ID
+                    discardTouchSequenceAfterTimestamping = false
                 }
             }
             return true
@@ -974,6 +989,7 @@ class WaveformTimelineView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN -> {
                 activePointerId = event.getPointerId(0)
                 dragStartX = event.x
+                lastActiveTouchX = event.x
                 suppressTapSelection = false
 
                 if (isInSubtitleArea(event.y)) {
@@ -1026,6 +1042,7 @@ class WaveformTimelineView @JvmOverloads constructor(
                 val pointerIndex = event.findPointerIndex(activePointerId)
                 if (pointerIndex < 0) return true
                 val touchX = event.getX(pointerIndex)
+                lastActiveTouchX = touchX
                 val dx = touchX - dragStartX
 
                 if (isDraggingWaveform) {
@@ -1176,6 +1193,7 @@ class WaveformTimelineView @JvmOverloads constructor(
 
         activePointerId = event.getPointerId(remainingIndex)
         val remainingX = event.getX(remainingIndex)
+        lastActiveTouchX = remainingX
         if (timestamping) {
             lastTouchXForTimestamp = remainingX
             return
@@ -1417,6 +1435,16 @@ class WaveformTimelineView @JvmOverloads constructor(
     // ==================== 打轴模式 ====================
 
     fun startTimestamping(startMs: Long) {
+        cancelPendingSingleTap()
+        discardTouchSequenceAfterTimestamping = activePointerId != MotionEvent.INVALID_POINTER_ID
+        if (discardTouchSequenceAfterTimestamping) {
+            lastTouchXForTimestamp = lastActiveTouchX
+        }
+        downOnSelectedSubtitle = false
+        dragMode = DragMode.NONE
+        currentSubtitle = null
+        isDraggingWaveform = false
+        isPinching = false
         isTimestampingMode = true
         timestampStartMs = startMs
         timestampAnchorX = timeToX(startMs)
