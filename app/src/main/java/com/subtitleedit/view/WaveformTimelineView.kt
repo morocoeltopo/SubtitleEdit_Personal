@@ -342,6 +342,13 @@ class WaveformTimelineView @JvmOverloads constructor(
             }
 
             override fun onLongPress(e: MotionEvent) {
+                // 字幕拖动和限定区间长按共用同一触摸序列。拖动已开始或已越过
+                // 自定义拖动阈值时，忽略仍在等待队列中的长按回调。
+                if (isTimestampingMode || isPinching || isDraggingWaveform ||
+                    dragMode != DragMode.NONE || suppressTapSelection ||
+                    (downOnSelectedSubtitle && abs(lastActiveTouchX - dragStartX) > 8f)) {
+                    return
+                }
                 val subtitleIndex = findSubtitleIndex(e.x, e.y)
                 if (subtitleIndex < 0) return
                 limitedPlaybackIndex = if (limitedPlaybackIndex == subtitleIndex) null else subtitleIndex
@@ -983,6 +990,12 @@ class WaveformTimelineView @JvmOverloads constructor(
             return true
         }
 
+        // GestureDetector 可能在处理本次 MOVE 时立即触发长按，先记录最新坐标，
+        // 让长按回调能识别同一事件中刚刚越过阈值的拖动。
+        if (event.actionMasked == MotionEvent.ACTION_MOVE && event.pointerCount == 1) {
+            val pointerIndex = event.findPointerIndex(activePointerId)
+            if (pointerIndex >= 0) lastActiveTouchX = event.getX(pointerIndex)
+        }
         gestureDetector.onTouchEvent(event)
 
         when (event.actionMasked) {
