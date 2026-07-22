@@ -403,10 +403,6 @@ class EditorActivity : AppCompatActivity() {
                 selectRangeBetweenSelectedSubtitles()
                 true
             }
-            R.id.menu_select_range -> {
-                showSelectRangeDialog()
-                true
-            }
             R.id.menu_save_draft -> {
                 saveDraft()
                 true
@@ -1799,65 +1795,6 @@ class EditorActivity : AppCompatActivity() {
                     reloadFile()
                 }
                 dialog.dismiss()
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-    
-    private fun showSelectRangeDialog() {
-        if (!ensureListMode()) return
-        
-        val totalCount = subtitleEntries.size
-        if (totalCount == 0) {
-            showShortToast("没有字幕条目")
-            return
-        }
-        
-        val layout = createDialogInputContainer()
-        val rangeLabel = " (1-$totalCount)"
-
-        // 起始输入
-        val (startLayout, etStart) = createLabeledNumberInputRow(
-            hint = "从",
-            label = rangeLabel,
-            defaultValue = "1",
-            allowSigned = false,
-            labelPaddingStart = 10
-        )
-        
-        // 结束输入
-        val (endLayout, etEnd) = createLabeledNumberInputRow(
-            hint = "到",
-            label = rangeLabel,
-            defaultValue = totalCount.toString(),
-            allowSigned = false,
-            labelPaddingStart = 10
-        )
-        
-        layout.addView(startLayout)
-        layout.addView(endLayout)
-        
-        AlertDialog.Builder(this)
-            .setTitle("快速选择范围")
-            .setMessage("输入要选择的字幕范围")
-            .setView(layout)
-            .setPositiveButton("确定") { _, _ ->
-                val start = etStart.text.toString().toIntOrNull() ?: 1
-                val end = etEnd.text.toString().toIntOrNull() ?: totalCount
-                
-                // 转换为 0-based 索引
-                val startIndex = (start - 1).coerceIn(0, totalCount - 1)
-                val endIndex = (end - 1).coerceIn(0, totalCount - 1)
-                
-                // 确保 start <= end
-                val actualStart = minOf(startIndex, endIndex)
-                val actualEnd = maxOf(startIndex, endIndex)
-                
-                // 保留已有选择，并一次性加入区间，避免逐项切换工具栏状态。
-                val selectedIndices = subtitleAdapter.getSelectedPositions() + (actualStart..actualEnd)
-                subtitleAdapter.setSelectionByIndices(selectedIndices)
-                updateSelectedCountDisplay()
-                showShortToast("已选择第 $start 到 $end 条字幕")
             }
             .setNegativeButton("取消", null)
             .show()
