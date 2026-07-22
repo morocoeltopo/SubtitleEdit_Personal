@@ -3,6 +3,7 @@ package com.subtitleedit.adapter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.graphics.drawable.Drawable
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
@@ -21,8 +22,14 @@ class FileListAdapter(
     private val onItemLongClick: (File) -> Unit
 ) : ListAdapter<File, FileListAdapter.FileViewHolder>(FileDiffCallback()) {
 
+    private companion object {
+        val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v")
+        val TEXT_EXTENSIONS = setOf("md", "log", "json", "xml", "csv", "ini", "conf")
+    }
+
     private var selectionMode = false
     private var selectedPaths: Set<String> = emptySet()
+    private val apkIconCache = mutableMapOf<String, Drawable?>()
 
     fun updateSelection(selectionMode: Boolean, selectedPaths: Set<String>) {
         this.selectionMode = selectionMode
@@ -54,12 +61,26 @@ class FileListAdapter(
                 tvFileSize.visibility = View.GONE
                 tvFileExtension.visibility = View.GONE
             } else {
-                ivFileIcon.setImageResource(R.drawable.ic_file)
+                val extension = file.extension.lowercase()
+                if (extension == "apk") {
+                    ivFileIcon.setImageDrawable(loadApkIcon(file))
+                } else {
+                    ivFileIcon.setImageResource(
+                        when {
+                            FileUtils.isAudioFile(file) -> R.drawable.ic_file_audio
+                            extension in VIDEO_EXTENSIONS -> R.drawable.ic_file_video
+                            FileUtils.isSubtitleFile(file) || extension in TEXT_EXTENSIONS ->
+                                R.drawable.ic_file_text
+                            else -> R.drawable.ic_file
+                        }
+                    )
+                }
                 tvFileSize.text = FileUtils.formatFileSize(file.length())
                 tvFileSize.visibility = View.VISIBLE
                 tvFileExtension.text = file.extension.uppercase()
                 tvFileExtension.visibility = View.VISIBLE
             }
+            ivFileIcon.alpha = if (file.name.startsWith(".") && file.name != "..") 0.5f else 1f
 
             // 设置文件名
             tvFileName.text = file.name
@@ -80,6 +101,27 @@ class FileListAdapter(
                 onItemLongClick(file)
                 true
             }
+        }
+
+        @Suppress("DEPRECATION")
+        private fun loadApkIcon(file: File): Drawable? {
+            val cacheKey = "${file.absolutePath}:${file.lastModified()}"
+            if (apkIconCache.containsKey(cacheKey)) return apkIconCache[cacheKey]
+
+            val packageManager = itemView.context.packageManager
+            val icon = runCatching {
+                val packageInfo = packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+                packageInfo?.applicationInfo?.let { applicationInfo ->
+                    applicationInfo.sourceDir = file.absolutePath
+                    applicationInfo.publicSourceDir = file.absolutePath
+                    applicationInfo.loadIcon(packageManager)
+                }
+            }.getOrNull() ?: androidx.core.content.ContextCompat.getDrawable(
+                itemView.context,
+                R.drawable.ic_file
+            )
+            apkIconCache[cacheKey] = icon
+            return icon
         }
     }
 

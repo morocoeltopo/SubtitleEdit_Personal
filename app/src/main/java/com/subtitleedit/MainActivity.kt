@@ -55,6 +55,8 @@ class MainActivity : AppCompatActivity() {
     private var updateCheckStarted = false
     private var pendingUpdate: UpdateChecker.UpdateInfo? = null
     private var updateDialogShown = false
+    private var showAllFileTypes = false
+    private var showHiddenFiles = false
 
     private enum class FileOperation { COPY, MOVE }
     
@@ -95,6 +97,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        showAllFileTypes = settingsManager.isShowAllFileTypesEnabled()
+        showHiddenFiles = settingsManager.isShowHiddenFilesEnabled()
         
         setupToolbar()
         setupRecyclerView()
@@ -104,6 +108,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        val newShowAllFileTypes = SettingsManager.getInstance(this).isShowAllFileTypesEnabled()
+        val newShowHiddenFiles = SettingsManager.getInstance(this).isShowHiddenFilesEnabled()
+        if (newShowAllFileTypes != showAllFileTypes || newShowHiddenFiles != showHiddenFiles) {
+            showAllFileTypes = newShowAllFileTypes
+            showHiddenFiles = newShowHiddenFiles
+            currentDirectory?.let(::loadDirectory)
+        }
         pendingUpdate?.let(::showPendingUpdate)
         if (!updateCheckStarted && SettingsManager.getInstance(this).shouldCheckUpdatesOnStartup()) {
             updateCheckStarted = true
@@ -288,21 +299,29 @@ class MainActivity : AppCompatActivity() {
         
         // 添加子目录
         val subDirs = directory.listFiles { file ->
-            file.isDirectory && !file.name.startsWith(".")
+            file.isDirectory && (showHiddenFiles || !file.name.startsWith("."))
         }?.sortedBy { it.name.lowercase() } ?: emptyList()
         files.addAll(subDirs)
         
         // 添加字幕文件
         val subtitleFiles = directory.listFiles { file ->
-            file.isFile && FileUtils.isSubtitleFile(file)
+            file.isFile && (showHiddenFiles || !file.name.startsWith(".")) && FileUtils.isSubtitleFile(file)
         }?.sortedBy { it.name.lowercase() } ?: emptyList()
         files.addAll(subtitleFiles)
         
         // 添加音频文件
         val audioFiles = directory.listFiles { file ->
-            file.isFile && FileUtils.isAudioFile(file)
+            file.isFile && (showHiddenFiles || !file.name.startsWith(".")) && FileUtils.isAudioFile(file)
         }?.sortedBy { it.name.lowercase() } ?: emptyList()
         files.addAll(audioFiles)
+
+        if (showAllFileTypes) {
+            val otherFiles = directory.listFiles { file ->
+                file.isFile && (showHiddenFiles || !file.name.startsWith(".")) &&
+                    !FileUtils.isSubtitleFile(file) && !FileUtils.isAudioFile(file)
+            }?.sortedBy { it.name.lowercase() } ?: emptyList()
+            files.addAll(otherFiles)
+        }
         visibleFiles.clear()
         visibleFiles.addAll(files.filter { it.name != ".." })
         

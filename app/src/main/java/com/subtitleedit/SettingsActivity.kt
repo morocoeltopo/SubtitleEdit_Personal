@@ -36,6 +36,7 @@ class SettingsActivity : AppCompatActivity() {
         setupAiSettings()
         setupLogSettings()
         setupPlaybackSettings()
+        setupFileManagementSettings()
         setupUpdateSettings()
         setupThemeSettings()
         setupAbout()
@@ -122,6 +123,15 @@ class SettingsActivity : AppCompatActivity() {
     private fun setupUpdateSettings() {
         binding.switchCheckUpdatesOnStartup.setOnCheckedChangeListener { _, isChecked ->
             settingsManager.setCheckUpdatesOnStartup(isChecked)
+        }
+    }
+
+    private fun setupFileManagementSettings() {
+        binding.switchShowAllFileTypes.setOnCheckedChangeListener { _, isChecked ->
+            settingsManager.setShowAllFileTypesEnabled(isChecked)
+        }
+        binding.switchShowHiddenFiles.setOnCheckedChangeListener { _, isChecked ->
+            settingsManager.setShowHiddenFilesEnabled(isChecked)
         }
     }
 
@@ -250,6 +260,8 @@ class SettingsActivity : AppCompatActivity() {
 
         // 选中字幕循环播放
         binding.switchLoopSelectedSubtitle.isChecked = settingsManager.isLoopSelectedSubtitleEnabled()
+        binding.switchShowAllFileTypes.isChecked = settingsManager.isShowAllFileTypesEnabled()
+        binding.switchShowHiddenFiles.isChecked = settingsManager.isShowHiddenFilesEnabled()
         binding.switchCheckUpdatesOnStartup.isChecked = settingsManager.shouldCheckUpdatesOnStartup()
     }
 
