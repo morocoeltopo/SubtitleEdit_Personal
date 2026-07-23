@@ -14,14 +14,13 @@ import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
-import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -39,8 +38,6 @@ object ModelDownloader {
     private const val DEMIX_MODEL_NAME = "htdemucs_fp16weights.onnx"
     private const val MIN_ONNX_SIZE = 1024L * 1024L
     private const val BUFFER_SIZE = 1024 * 1024
-    private const val EXTRACTION_INPUT_BUFFER_SIZE = 64 * 1024
-    private const val EXTRACTION_BUFFER_SIZE = 64 * 1024
     private const val MAX_ARCHIVE_ENTRIES = 10_000
     private const val MAX_EXTRACTED_BYTES = 8L * 1024L * 1024L * 1024L
 
@@ -414,143 +411,111 @@ object ModelDownloader {
         shouldWrite: (String) -> Boolean,
         onProgress: (Progress) -> Unit
     ) {
-        if (!NativeTarBz2Extractor.isLibraryLoaded) {
-            extractTarBz2Java(
-                archive = archive,
-                outputDir = outputDir,
-                progressMessage = progressMessage,
-                shouldWrite = shouldWrite,
-                onProgress = onProgress
-            )
-            return
-        }
-
-        val archiveSize = archive.length().coerceAtLeast(1L)
         val callerJob = currentCoroutineContext()[kotlinx.coroutines.Job]
-        val nativeCallback = object : NativeTarBz2Extractor.Callback {
-            override fun shouldExtract(fileName: String): Boolean = shouldWrite(
-                fileName.substringAfterLast('/').substringAfterLast('\\')
-            )
-
-            override fun onProgress(compressedBytes: Long, totalBytes: Long) {
-                if (callerJob?.isActive == false) return
-                val total = totalBytes.takeIf { it > 0L } ?: archiveSize
-                onProgress(
-                    Progress(
-                        progressMessage,
-                        compressedBytes.coerceIn(0L, total),
-                        total
-                    )
-                )
-            }
+        val parent = outputDir.parentFile
+            ?: throw IOException("模型解压临时目录没有父目录")
+        val payloadStaging = try {
+            Files.createTempDirectory(parent.toPath(), ".subtitleedit-model-tar-").toFile()
+        } catch (error: Exception) {
+            throw IOException("无法创建模型 TAR 暂存目录", error)
         }
         try {
-            NativeTarBz2Extractor.extract(
-                archive = archive,
-                outputDir = outputDir,
-                maxEntries = MAX_ARCHIVE_ENTRIES,
-                maxExtractedBytes = MAX_EXTRACTED_BYTES,
-                callback = nativeCallback
-            )
-        } catch (e: NativeTarBz2Extractor.NativeUnavailableException) {
-            extractTarBz2Java(
-                archive = archive,
-                outputDir = outputDir,
-                progressMessage = progressMessage,
-                shouldWrite = shouldWrite,
-                onProgress = onProgress
-            )
+            val entries = OfficialSevenZipArchive.withCompressedTarStream(
+                file = archive,
+                password = null
+            ) { input, expectedTarBytes ->
+                StreamingTarExtractor.extract(
+                    input = input,
+                    staging = payloadStaging,
+                    expectedTarBytes = expectedTarBytes,
+                    maxEntries = MAX_ARCHIVE_ENTRIES,
+                    maxBytes = MAX_EXTRACTED_BYTES,
+                    validateExpectedSize = true,
+                    shouldExtract = { entry ->
+                        !entry.isDirectory && shouldWrite(entry.name.substringAfterLast('/'))
+                    },
+                    checkCancelled = { callerJob?.ensureActive() },
+                    onProgress = { tarBytes, tarTotal ->
+                        callerJob?.ensureActive()
+                        // BZip2 has no uncompressed-size footer.  Keep reporting TAR progress,
+                        // but mark the total as unknown instead of presenting TAR bytes as archive bytes.
+                        val total = tarTotal.takeIf { it > 0L } ?: -1L
+                        val consumed = if (total > 0L) tarBytes.coerceIn(0L, total)
+                        else tarBytes.coerceAtLeast(0L)
+                        onProgress(Progress(progressMessage, consumed, total))
+                    }
+                )
+            }
+            callerJob?.ensureActive()
+            installSelectedTarEntries(entries, payloadStaging, outputDir)
+        } finally {
+            payloadStaging.deleteRecursively()
         }
     }
 
-    private suspend fun extractTarBz2Java(
-        archive: File,
-        outputDir: File,
-        progressMessage: String,
-        shouldWrite: (String) -> Boolean,
-        onProgress: (Progress) -> Unit
+    /** Moves the selected flat TAR payloads into their validated archive-relative paths. */
+    private fun installSelectedTarEntries(
+        entries: List<StreamingTarExtractor.Entry>,
+        payloadStaging: File,
+        outputDir: File
     ) {
-        val rootPath = outputDir.canonicalFile.path + File.separator
-        val archiveSize = archive.length().coerceAtLeast(1L)
-        var entryCount = 0
-        var extractedBytes = 0L
-        var lastCompressedBytes = -1L
-        var lastProgressAt = 0L
-        FileInputStream(archive).use { fileInput ->
-            BufferedInputStream(fileInput, EXTRACTION_INPUT_BUFFER_SIZE).use { bufferedInput ->
-                BZip2CompressorInputStream(bufferedInput, true).use { bzipInput ->
-                    TarArchiveInputStream(bzipInput).use { tarInput ->
-                        fun reportProgress(force: Boolean = false) {
-                            val now = System.currentTimeMillis()
-                            if (!force && now - lastProgressAt < 200L) return
+        val outputRoot = outputDir.toPath().toAbsolutePath().normalize()
+        val payloadRoot = payloadStaging.toPath().toAbsolutePath().normalize()
+        if (Files.isSymbolicLink(outputRoot) ||
+            !Files.isDirectory(outputRoot, LinkOption.NOFOLLOW_LINKS)
+        ) {
+            throw IOException("模型解压目标目录不可用")
+        }
 
-                            val compressedBytes = if (force) {
-                                archiveSize
-                            } else {
-                                fileInput.channel.position().coerceIn(0L, archiveSize)
-                            }
-                            if (force || compressedBytes != lastCompressedBytes) {
-                                onProgress(
-                                    Progress(
-                                        progressMessage,
-                                        compressedBytes,
-                                        archiveSize
-                                    )
-                                )
-                                lastCompressedBytes = compressedBytes
-                            }
-                            // 即使缓冲读取尚未推进底层文件位置，也要限制下一次 position() 查询。
-                            lastProgressAt = now
-                        }
+        entries.asSequence()
+            .filter { !it.isDirectory && it.stagedFile != null }
+            .forEach { entry ->
+                val source = entry.stagedFile!!.toPath().toAbsolutePath().normalize()
+                if (!source.startsWith(payloadRoot) ||
+                    Files.isSymbolicLink(source) ||
+                    !Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS) ||
+                    Files.size(source) != entry.size
+                ) {
+                    throw IOException("TAR 条目未正确暂存：${entry.name}")
+                }
 
-                        val extractionBuffer = ByteArray(EXTRACTION_BUFFER_SIZE)
-                        while (true) {
-                            currentCoroutineContext().ensureActive()
-                            val entry = tarInput.nextTarEntry ?: break
-                            entryCount++
-                            if (entryCount > MAX_ARCHIVE_ENTRIES) {
-                                throw IOException("压缩包文件数量异常")
-                            }
-                            if (entry.isSymbolicLink || entry.isLink) continue
-                            val output = File(outputDir, entry.name).canonicalFile
-                            if (output != outputDir.canonicalFile && !output.path.startsWith(rootPath)) {
-                                throw IOException("压缩包包含不安全路径：${entry.name}")
-                            }
-                            if (entry.isDirectory) {
-                                reportProgress()
-                                continue
-                            }
-                            if (!entry.isFile) continue
-                            if (entry.size < 0L || entry.size > MAX_EXTRACTED_BYTES - extractedBytes) {
-                                throw IOException("压缩包解压大小异常")
-                            }
-                            val writeEntry = shouldWrite(output.name)
-                            val fileOutput = if (writeEntry) {
-                                output.parentFile?.let { parent ->
-                                    if (!parent.exists() && !parent.mkdirs()) {
-                                        throw IOException("无法创建模型目录：${parent.name}")
-                                    }
-                                }
-                                BufferedOutputStream(FileOutputStream(output), EXTRACTION_BUFFER_SIZE)
-                            } else {
-                                null
-                            }
-                            fileOutput.use { destination ->
-                                while (true) {
-                                    currentCoroutineContext().ensureActive()
-                                    val read = tarInput.read(extractionBuffer)
-                                    if (read < 0) break
-                                    destination?.write(extractionBuffer, 0, read)
-                                    extractedBytes += read
-                                    if (extractedBytes > MAX_EXTRACTED_BYTES) {
-                                        throw IOException("压缩包解压内容过大")
-                                    }
-                                    reportProgress()
-                                }
-                            }
-                            reportProgress()
-                        }
-                        reportProgress(force = true)
+                val target = outputRoot.resolve(entry.name).normalize()
+                if (!target.startsWith(outputRoot) || target == outputRoot) {
+                    throw IOException("TAR 条目包含不安全路径：${entry.name}")
+                }
+                ensureModelParentDirectories(outputRoot, target.parent)
+                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                    throw IOException("模型 TAR 包含重复文件：${entry.name}")
+                }
+                try {
+                    Files.move(source, target)
+                } catch (error: Exception) {
+                    throw IOException("无法安装模型 TAR 条目：${entry.name}", error)
+                }
+            }
+    }
+
+    private fun ensureModelParentDirectories(root: Path, directory: Path?) {
+        if (directory == null || !directory.startsWith(root)) {
+            throw IOException("模型 TAR 条目父目录不安全")
+        }
+        var current = root
+        for (component in root.relativize(directory)) {
+            current = current.resolve(component.toString())
+            if (Files.exists(current, LinkOption.NOFOLLOW_LINKS)) {
+                if (Files.isSymbolicLink(current) ||
+                    !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS)
+                ) {
+                    throw IOException("模型 TAR 条目父路径不是安全目录")
+                }
+            } else {
+                try {
+                    Files.createDirectory(current)
+                } catch (error: Exception) {
+                    if (!Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS) ||
+                        Files.isSymbolicLink(current)
+                    ) {
+                        throw IOException("无法创建模型 TAR 条目目录", error)
                     }
                 }
             }
@@ -682,8 +647,10 @@ object ModelDownloader {
     private fun directChildContaining(root: File, file: File): File {
         var current = file.parentFile ?: return root
         if (current == root) return root
-        while (current.parentFile != null && current.parentFile != root) {
-            current = current.parentFile
+        while (true) {
+            val parent = current.parentFile ?: break
+            if (parent == root) break
+            current = parent
         }
         return if (current.parentFile == root) current else root
     }

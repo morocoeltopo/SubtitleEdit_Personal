@@ -140,6 +140,8 @@
 
 本项目采用 **[GPL-3.0 License](https://www.gnu.org/licenses/gpl-3.0.html)** 授权
 
+第三方组件的版权与许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
 ## 鸣谢
 
 本项目在开发过程中，部分核心功能基于以下项目实现，感谢大佬的开源！

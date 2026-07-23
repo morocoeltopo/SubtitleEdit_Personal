@@ -56,7 +56,7 @@ class ModelDownloadProgressDialog(
             statusText.text = "${progress.message}：$percent%（${formatBytes(progress.downloadedBytes)} / ${formatBytes(progress.totalBytes)}）"
         } else {
             progressBar.isIndeterminate = true
-            statusText.text = progress.message
+            statusText.text = "${progress.message}：已处理 ${formatBytes(progress.downloadedBytes.coerceAtLeast(0L))}"
         }
     }
 

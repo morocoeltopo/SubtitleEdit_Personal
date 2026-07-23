@@ -49,6 +49,17 @@ fun registerApkExport(variantName: String) {
 registerApkExport("debug")
 registerApkExport("release")
 
+val archiveLicenseAssetsDir = layout.buildDirectory.dir("generated/archiveLicenseAssets")
+val generateArchiveLicenseAssets by tasks.registering(Sync::class) {
+    from("src/main/cpp/third_party/7zip/7zip-LICENSE.txt") {
+        into("licenses")
+    }
+    from(rootProject.file("THIRD_PARTY_NOTICES.md")) {
+        into("licenses")
+    }
+    into(archiveLicenseAssetsDir)
+}
+
 android {
     namespace = "com.subtitleedit"
     compileSdk = 34
@@ -61,11 +72,15 @@ android {
         versionCode = 2
         versionName = "1.1.2"
 
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         externalNativeBuild {
             cmake {
-                targets("model_archive_jni")
+                targets("subtitleedit_7zip")
                 arguments("-DANDROID_STL=c++_static")
             }
         }
@@ -87,6 +102,8 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    sourceSets.getByName("main").assets.srcDir(archiveLicenseAssetsDir.get().asFile)
 
     splits {
         abi {
@@ -113,6 +130,10 @@ android {
     }
 }
 
+tasks.named("preBuild").configure {
+    dependsOn(generateArchiveLicenseAssets)
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
@@ -135,9 +156,6 @@ dependencies {
 
     // OkHttp
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-
-    // tar.bz2 extraction for downloadable speech models
-    implementation("org.apache.commons:commons-compress:1.26.1")
 
     // Standalone ONNX Runtime Java API for HTDemucs vocal separation.
     // Match the ONNX Runtime shared library already shipped with sherpa-onnx.
