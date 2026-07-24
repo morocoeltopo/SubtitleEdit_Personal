@@ -2398,7 +2398,7 @@ class EditorActivity : AppCompatActivity() {
             if (outputFile.exists()) outputFile.delete()
             val command = "-y -i \"${inputFile.absolutePath}\" -ar 16000 -ac 1 -c:a pcm_s16le \"${outputFile.absolutePath}\""
             val session = FFmpegKit.execute(command)
-            outputFile.takeIf { session.returnCode.isValueSuccess && isRecognitionPcmCacheValid(it) }
+            outputFile.takeIf { session.getReturnCode()?.isValueSuccess() == true && isRecognitionPcmCacheValid(it) }
         } catch (e: Exception) {
             android.util.Log.e("EditorActivity", "快速转录音频转换失败", e)
             null
@@ -2716,7 +2716,7 @@ class EditorActivity : AppCompatActivity() {
         return withContext(Dispatchers.IO) {
             // 用 FFprobeKit 获取 start time
             val session = com.arthenica.ffmpegkit.FFprobeKit.getMediaInformation(audioFile.absolutePath)
-            val startTime = session.mediaInformation?.startTime?.toDoubleOrNull() ?: 0.0
+            val startTime = session.getMediaInformation()?.getStartTime()?.toDoubleOrNull() ?: 0.0
 
             if (startTime <= 0.001) {
                 // start time 正常，直接返回原文件
@@ -2737,7 +2737,7 @@ class EditorActivity : AppCompatActivity() {
                 val cmd = "-y -i \"${audioFile.absolutePath}\" -c:a pcm_s16le -ar 44100 -ac 2 \"${wavFile.absolutePath}\""
                 val ffmpegSession = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
 
-                if (ffmpegSession.returnCode.isValueSuccess && wavFile.length() > 44L) {
+                if (ffmpegSession.getReturnCode()?.isValueSuccess() == true && wavFile.length() > 44L) {
                     android.util.Log.d("EditorActivity", "WAV 转换成功：${wavFile.absolutePath}")
                     wavFile
                 } else {
@@ -3321,7 +3321,7 @@ class EditorActivity : AppCompatActivity() {
                           "-frames:v 1 \"${specFile.absolutePath}\""
 
                 val session = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
-                if (session.returnCode.isValueSuccess && specFile.exists())
+                if (session.getReturnCode()?.isValueSuccess() == true && specFile.exists())
                     android.graphics.BitmapFactory.decodeFile(specFile.absolutePath)
                 else null
             }

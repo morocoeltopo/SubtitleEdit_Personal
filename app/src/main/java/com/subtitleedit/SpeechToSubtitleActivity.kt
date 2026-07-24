@@ -459,7 +459,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
             val cmd = "-y -i \"${inputFile.absolutePath}\" -ar 16000 -ac 1 -c:a pcm_s16le \"${outputFile.absolutePath}\""
             val session = FFmpegKit.execute(cmd)
 
-            if (session.returnCode.isValueSuccess && outputFile.exists()) {
+            if (session.getReturnCode()?.isValueSuccess() == true && outputFile.exists()) {
                 outputFile
             } else {
                 null

@@ -368,7 +368,7 @@ class VocalSeparationActivity : AppCompatActivity() {
         if (output.exists()) output.delete()
         val command = "-y -i \"${input.absolutePath}\" -vn -ar 44100 -ac 2 -f f32le -c:a pcm_f32le \"${output.absolutePath}\""
         val session = FFmpegKit.execute(command)
-        return if (session.returnCode.isValueSuccess && output.isFile && output.length() > 0) output else null
+        return if (session.getReturnCode()?.isValueSuccess() == true && output.isFile && output.length() > 0) output else null
     }
 
     private fun copyUriToCache(uri: Uri, name: String, cache: File): File? = runCatching {

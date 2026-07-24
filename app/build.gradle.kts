@@ -151,8 +151,8 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // FFmpegKit - for audio decoding to PCM
-    implementation("com.arthenica:ffmpeg-kit-min:6.0")
+    // FFmpegKitNext is built locally because upstream does not publish Android artifacts.
+    implementation("com.arthenica:ffmpeg-kit-next:8.1.0")
 
     // OkHttp
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

@@ -1,5 +1,33 @@
 # sherpa-onnx 集成说明
 
+## FFmpegKitNext
+
+FFmpegKitNext 8.1.0 的本地 Maven 产物位于：
+
+```text
+app/libs/ffmpeg-kit-next-maven/com/arthenica/ffmpeg-kit-next/8.1.0/
+```
+
+该 AAR 使用上游 `android-r27d` profile 在 API 24 上构建，仅包含
+`armeabi-v7a` 和 `arm64-v8a`。重新生成时使用：
+
+```bash
+./nix-android.sh \
+  -p android-r27d \
+  --enable-android-zlib \
+  --disable-arm-v7a-neon \
+  --disable-x86 \
+  --disable-x86-64
+```
+
+AAR SHA-256：
+
+```text
+F8C1168AF4D48625F1DB6250AC553657715F27EA705FC1556CC223CC8A062897
+```
+
+## sherpa-onnx
+
 ## ✅ 集成已完成
 
 sherpa-onnx v1.13.4 已成功集成到项目中。

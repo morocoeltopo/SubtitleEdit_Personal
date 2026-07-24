@@ -106,10 +106,10 @@ object FfmpegWaveformExtractor {
         Log.d(TAG, "执行 FFmpeg 命令：$cmd")
         
         val session = FFmpegKit.execute(cmd)
-        val returnCode = session.returnCode
+        val returnCode = session.getReturnCode()
         
         // 使用 ReturnCode 的 isValueSuccess 方法判断
-        return if (returnCode.isValueSuccess) {
+        return if (returnCode?.isValueSuccess() == true) {
             Log.d(TAG, "PCM 导出成功")
             true
         } else {

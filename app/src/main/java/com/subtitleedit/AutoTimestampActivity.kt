@@ -462,10 +462,10 @@ class AutoTimestampActivity : AppCompatActivity() {
             val cmd = "-y -i \"${inputFile.absolutePath}\" -ar 16000 -ac 1 -c:a pcm_s16le \"${outputFile.absolutePath}\""
             val session = FFmpegKit.execute(cmd)
 
-            if (session.returnCode.isValueSuccess && outputFile.exists()) {
+            if (session.getReturnCode()?.isValueSuccess() == true && outputFile.exists()) {
                 outputFile
             } else {
-                Log.e("AutoTimestamp", "FFmpeg 转换失败: ${session.output}")
+                Log.e("AutoTimestamp", "FFmpeg 转换失败: ${session.getOutput()}")
                 null
             }
         } catch (e: Exception) {

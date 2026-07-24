@@ -478,16 +478,16 @@ class MediaConvertActivity : AppCompatActivity() {
 
     private fun probeMediaInfo(path: String): String {
         val session = FFprobeKit.getMediaInformation(path)
-        val info    = session.mediaInformation ?: return "无法读取媒体信息"
+        val info = session.getMediaInformation() ?: return "无法读取媒体信息"
         val sb = StringBuilder()
-        sb.append("时长：${formatDuration(info.duration?.toDoubleOrNull() ?: 0.0)}\n")
-        sb.append("比特率：${info.bitrate ?: "未知"} kb/s\n")
-        info.streams?.forEach { stream ->
-            when (stream.type) {
-                "video" -> sb.append("视频：${stream.codec} ${stream.width}x${stream.height}" +
-                        " @${stream.averageFrameRate} fps\n")
-                "audio" -> sb.append("音频：${stream.codec} ${stream.sampleRate} Hz" +
-                        " ${stream.channelLayout}\n")
+        sb.append("时长：${formatDuration(info.getDuration()?.toDoubleOrNull() ?: 0.0)}\n")
+        sb.append("比特率：${info.getBitrate() ?: "未知"} kb/s\n")
+        info.getStreams().forEach { stream ->
+            when (stream.getType()) {
+                "video" -> sb.append("视频：${stream.getCodec()} ${stream.getWidth()}x${stream.getHeight()}" +
+                        " @${stream.getAverageFrameRate()} fps\n")
+                "audio" -> sb.append("音频：${stream.getCodec()} ${stream.getSampleRate()} Hz" +
+                        " ${stream.getChannelLayout()}\n")
             }
         }
         return sb.toString().trimEnd()
@@ -587,7 +587,7 @@ class MediaConvertActivity : AppCompatActivity() {
 
                 // 等待完成（session 已在后台线程执行，这里轮询）
                 withContext(Dispatchers.IO) {
-                    while (!session.state.name.let {
+                    while (!session.getState().name.let {
                             it == "COMPLETED" || it == "FAILED" || it == "CANCELLED"
                         }) {
                         Thread.sleep(100)
@@ -596,7 +596,7 @@ class MediaConvertActivity : AppCompatActivity() {
 
                 binding.progressBar.progress = 100
 
-                if (ReturnCode.isSuccess(session.returnCode)) {
+                if (ReturnCode.isSuccess(session.getReturnCode())) {
                     // 5. 将文件复制到输出目录
                     val outputFileName = "${baseName}.${fmt.extension}"
                     val finalOutputUri = copyFileToOutputDirectory(tempOutFile, outputFileName)
@@ -610,11 +610,11 @@ class MediaConvertActivity : AppCompatActivity() {
                     } else {
                         appendLog("\n⚠️ 转换成功但复制文件失败")
                     }
-                } else if (ReturnCode.isCancel(session.returnCode)) {
+                } else if (ReturnCode.isCancel(session.getReturnCode())) {
                     appendLog("\n⚠️ 已取消转换")
                 } else {
                     // 打印 FFmpeg 完整错误日志，方便定位具体原因
-                    val failLog = session.allLogsAsString ?: "无日志"
+                    val failLog = session.getAllLogsAsString().ifBlank { "无日志" }
                     // 从完整日志里提取关键错误行（含 "Error" 或 "Invalid" 或 "Unknown"）
                     val keyLines = failLog.lines()
                         .filter { it.contains("Error", ignoreCase = true)
