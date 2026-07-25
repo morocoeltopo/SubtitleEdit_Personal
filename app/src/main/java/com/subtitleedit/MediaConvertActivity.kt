@@ -17,14 +17,18 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegKitConfig
 import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
 import com.subtitleedit.databinding.ActivityMediaConvertBinding
 import com.subtitleedit.util.DirectoryDisplayPath
 import com.subtitleedit.util.FileUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -99,7 +103,7 @@ class MediaConvertActivity : AppCompatActivity() {
     private var selectedFormat: FormatInfo? = null
     private var convertJob: Job? = null
     private var currentSession: FFmpegSession? = null
-    private var outputFile: File? = null
+    private var outputUri: Uri? = null
     private var outputDirectoryUri: Uri? = null
 
     // 所有格式按钮（用于统一取消选中）
@@ -141,6 +145,10 @@ class MediaConvertActivity : AppCompatActivity() {
         setupOutputDirectory()
         setupButtons()
         updateUI()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            cleanupStaleConvertCache()
+        }
     }
 
     override fun onDestroy() {
@@ -444,11 +452,12 @@ class MediaConvertActivity : AppCompatActivity() {
         selectedFormatButton = null
         selectedFormat = null
 
-        // 异步探针
-        lifecycleScope.launch(Dispatchers.IO) {
-            val copiedPath = copyUriToCache(uri, sourceFileName) ?: return@launch
-            val info = probeMediaInfo(copiedPath)
-            withContext(Dispatchers.Main) {
+        // 优先通过 FFmpegKit SAF 协议直接探测；不支持直读的 provider 才回退缓存。
+        lifecycleScope.launch {
+            val info = withContext(Dispatchers.IO) {
+                probeMediaInfo(uri, sourceFileName)
+            }
+            if (sourceUri == uri) {
                 binding.tvSourceInfo.text = info
                 updateUI()
             }
@@ -466,19 +475,41 @@ class MediaConvertActivity : AppCompatActivity() {
         return name
     }
 
-    private fun copyUriToCache(uri: Uri, name: String): String? {
-        return try {
-            val dest = File(cacheDir, "convert_src_$name")
-            contentResolver.openInputStream(uri)?.use { ins ->
-                FileOutputStream(dest).use { out -> ins.copyTo(out) }
-            }
-            dest.absolutePath
-        } catch (e: Exception) { null }
+    private fun copyUriToCache(uri: Uri, name: String, taskCacheDir: File): File? {
+        return runCatching {
+            val safeName = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            val destination = File(taskCacheDir, "input_$safeName")
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(destination).use { output -> input.copyTo(output) }
+            } ?: return null
+            destination.takeIf { it.isFile && it.length() > 0L }
+        }.getOrNull()
     }
 
-    private fun probeMediaInfo(path: String): String {
-        val session = FFprobeKit.getMediaInformation(path)
-        val info = session.getMediaInformation() ?: return "无法读取媒体信息"
+    private fun probeMediaInfo(uri: Uri, fileName: String): String {
+        var safInput: String? = null
+        try {
+            safInput = FFmpegKitConfig.getSafParameterForRead(this, uri)
+            readMediaInfo(safInput)?.let { return it }
+        } catch (_: Exception) {
+            // Some document providers do not expose a seekable descriptor.
+        } finally {
+            FFmpegKitConfig.unregisterSafProtocolUrl(safInput)
+        }
+
+        val probeCache = createConvertTaskCache("probe")
+        return try {
+            val cachedInput = copyUriToCache(uri, fileName, probeCache)
+                ?: return "无法读取媒体信息"
+            readMediaInfo(cachedInput.absolutePath) ?: "无法读取媒体信息"
+        } finally {
+            probeCache.deleteRecursively()
+        }
+    }
+
+    private fun readMediaInfo(input: String): String? {
+        val session = FFprobeKit.getMediaInformation(input)
+        val info = session.getMediaInformation() ?: return null
         val sb = StringBuilder()
         sb.append("时长：${formatDuration(info.getDuration()?.toDoubleOrNull() ?: 0.0)}\n")
         sb.append("比特率：${info.getBitrate() ?: "未知"} kb/s\n")
@@ -549,49 +580,39 @@ class MediaConvertActivity : AppCompatActivity() {
             setConvertingState(true)
             binding.progressBar.progress = 0
             binding.tvLog.text = ""
-            outputFile = null
+            outputUri = null
+
+            val taskCacheDir = createConvertTaskCache("convert")
+            val baseName = File(sourceFileName).nameWithoutExtension
+            val tempOutFile = File(taskCacheDir, "output.${fmt.extension}")
+            var safInput: String? = null
 
             try {
-                // 1. 复制源文件到缓存
-                appendLog("正在复制源文件...")
-                val srcPath = withContext(Dispatchers.IO) {
-                    copyUriToCache(uri, sourceFileName)
-                } ?: throw Exception("复制源文件失败")
-
-                // 2. 构建输出路径（缓存目录）
-                val baseName = File(sourceFileName).nameWithoutExtension
-                val tempOutFile  = File(cacheDir, "convert_out_${baseName}.${fmt.extension}")
-                if (tempOutFile.exists()) tempOutFile.delete()
-
-                // 3. 构建 FFmpeg 命令
-                val cmd = buildFFmpegCommand(srcPath, tempOutFile.absolutePath, fmt)
-                appendLog("执行命令：\nffmpeg $cmd\n")
-
-                // 4. 执行
-                var lastProgress = 0
-                val session = withContext(Dispatchers.IO) {
-                    FFmpegKit.executeAsync(cmd,
-                        { /* complete */ },
-                        { log -> runOnUiThread { appendLog(log.message) } },
-                        { stats ->
-                            val progress = if (stats.time > 0) {
-                                // 粗略进度估算
-                                (lastProgress + 1).coerceAtMost(95)
-                            } else 0
-                            lastProgress = progress
-                            runOnUiThread { binding.progressBar.progress = progress }
-                        }
-                    )
+                // SAF 直读避免对大媒体文件做一次完整的前置复制。
+                safInput = withContext(Dispatchers.IO) {
+                    runCatching { FFmpegKitConfig.getSafParameterForRead(this@MediaConvertActivity, uri) }
+                        .getOrNull()
                 }
-                currentSession = session
 
-                // 等待完成（session 已在后台线程执行，这里轮询）
-                withContext(Dispatchers.IO) {
-                    while (!session.getState().name.let {
-                            it == "COMPLETED" || it == "FAILED" || it == "CANCELLED"
-                        }) {
-                        Thread.sleep(100)
+                var session = safInput
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let {
+                        appendLog("正在直接读取源文件...\n")
+                        executeConversion(it, tempOutFile, fmt)
                     }
+
+                if (session == null || shouldRetryWithCachedInput(session)) {
+                    if (session != null && ReturnCode.isCancel(session.getReturnCode())) {
+                        appendLog("\n⚠️ 已取消转换")
+                        return@launch
+                    }
+
+                    appendLog("\n直读不可用，正在使用临时缓存重试...\n")
+                    tempOutFile.delete()
+                    val cachedInput = withContext(Dispatchers.IO) {
+                        copyUriToCache(uri, sourceFileName, taskCacheDir)
+                    } ?: throw Exception("无法读取源文件")
+                    session = executeConversion(cachedInput.absolutePath, tempOutFile, fmt)
                 }
 
                 binding.progressBar.progress = 100
@@ -599,13 +620,16 @@ class MediaConvertActivity : AppCompatActivity() {
                 if (ReturnCode.isSuccess(session.getReturnCode())) {
                     // 5. 将文件复制到输出目录
                     val outputFileName = "${baseName}.${fmt.extension}"
-                    val finalOutputUri = copyFileToOutputDirectory(tempOutFile, outputFileName)
+                    val outputSize = tempOutFile.length()
+                    val finalOutputUri = withContext(Dispatchers.IO) {
+                        copyFileToOutputDirectory(tempOutFile, outputFileName)
+                    }
                     
                     if (finalOutputUri != null) {
-                        outputFile = tempOutFile
+                        outputUri = finalOutputUri
                         val outputPath = outputDirectoryUri?.let { DirectoryDisplayPath.fromUri(this@MediaConvertActivity, it) }
                             ?: getConvertOutputDirectory().absolutePath
-                        appendLog("\n✅ 转换成功！\n输出目录：$outputPath\n输出文件：$outputFileName\n文件大小：${formatSize(tempOutFile.length())}")
+                        appendLog("\n✅ 转换成功！\n输出目录：$outputPath\n输出文件：$outputFileName\n文件大小：${formatSize(outputSize)}")
                         binding.btnShareOutput.visibility = View.VISIBLE
                     } else {
                         appendLog("\n⚠️ 转换成功但复制文件失败")
@@ -626,12 +650,82 @@ class MediaConvertActivity : AppCompatActivity() {
                     appendLog("\n❌ 转换失败\n关键错误：\n${keyLines.ifBlank { failLog.takeLast(300) }}")
                 }
 
+            } catch (e: CancellationException) {
+                currentSession?.cancel()
+                withContext(NonCancellable) {
+                    repeat(50) {
+                        val state = currentSession?.getState()?.name
+                        if (state == null || state == "COMPLETED" || state == "FAILED" || state == "CANCELLED") {
+                            return@withContext
+                        }
+                        delay(100)
+                    }
+                }
+                throw e
             } catch (e: Exception) {
                 appendLog("\n❌ 错误：${e.message}")
             } finally {
-                setConvertingState(false)
+                FFmpegKitConfig.unregisterSafProtocolUrl(safInput)
+                currentSession = null
+                withContext(NonCancellable + Dispatchers.IO) {
+                    taskCacheDir.deleteRecursively()
+                }
+                if (!isDestroyed) setConvertingState(false)
             }
         }
+    }
+
+    private suspend fun executeConversion(
+        input: String,
+        output: File,
+        format: FormatInfo
+    ): FFmpegSession {
+        val command = buildFFmpegCommand(input, output.absolutePath, format)
+        appendLog("执行命令：\nffmpeg $command\n")
+
+        var lastProgress = 0
+        val session = withContext(Dispatchers.IO) {
+            FFmpegKit.executeAsync(
+                command,
+                { /* completion is observed through session state */ },
+                { log -> runOnUiThread { appendLog(log.message) } },
+                { statistics ->
+                    val progress = if (statistics.time > 0) {
+                        (lastProgress + 1).coerceAtMost(95)
+                    } else 0
+                    lastProgress = progress
+                    runOnUiThread { binding.progressBar.progress = progress }
+                }
+            )
+        }
+        currentSession = session
+
+        while (!session.getState().name.let {
+                it == "COMPLETED" || it == "FAILED" || it == "CANCELLED"
+            }) {
+            delay(100)
+        }
+        return session
+    }
+
+    private fun shouldRetryWithCachedInput(session: FFmpegSession): Boolean {
+        if (ReturnCode.isSuccess(session.getReturnCode()) || ReturnCode.isCancel(session.getReturnCode())) {
+            return false
+        }
+
+        val log = session.getAllLogsAsString().lowercase()
+        return listOf(
+            "error opening input",
+            "error opening input file",
+            "failed to open input",
+            "invalid data found when processing input",
+            "illegal seek",
+            "could not seek",
+            "failed to seek",
+            "operation not permitted",
+            "input/output error",
+            "moov atom not found"
+        ).any(log::contains)
     }
 
     /**
@@ -741,16 +835,43 @@ class MediaConvertActivity : AppCompatActivity() {
         appendLog("\n⚠️ 正在取消...")
     }
 
+    private fun createConvertTaskCache(purpose: String): File {
+        return File(
+            cacheDir,
+            "media_convert_${purpose}_${System.currentTimeMillis()}_${System.nanoTime()}"
+        ).apply { mkdirs() }
+    }
+
+    private fun cleanupStaleConvertCache() {
+        val staleBefore = System.currentTimeMillis() - 60 * 60 * 1000L
+        cacheDir.listFiles()?.forEach { file ->
+            val isLegacyCache = file.name.startsWith("convert_src_") ||
+                file.name.startsWith("convert_out_")
+            val isStaleTaskCache = file.name.startsWith("media_convert_") &&
+                file.lastModified() < staleBefore
+            if (isLegacyCache || isStaleTaskCache) {
+                file.deleteRecursively()
+            }
+        }
+    }
+
     // ==================== 输出分享 ====================
 
     private fun shareOutput() {
-        val file = outputFile ?: return
-        val uri  = androidx.core.content.FileProvider.getUriForFile(
-            this, "${packageName}.provider", file
-        )
+        val finalUri = outputUri ?: return
+        val shareUri = if (finalUri.scheme == "file") {
+            val file = finalUri.path?.let(::File) ?: return
+            androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${packageName}.provider",
+                file
+            )
+        } else {
+            finalUri
+        }
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = contentResolver.getType(uri) ?: "*/*"
-            putExtra(Intent.EXTRA_STREAM, uri)
+            type = contentResolver.getType(shareUri) ?: "*/*"
+            putExtra(Intent.EXTRA_STREAM, shareUri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, "分享转换结果"))
@@ -762,7 +883,8 @@ class MediaConvertActivity : AppCompatActivity() {
         binding.btnConvert.isEnabled    = !converting
         binding.btnPickFile.isEnabled   = !converting
         binding.btnCancel.visibility    = if (converting) View.VISIBLE else View.GONE
-        binding.btnShareOutput.visibility = View.GONE
+        binding.btnShareOutput.visibility =
+            if (!converting && outputUri != null) View.VISIBLE else View.GONE
         binding.progressBar.visibility  = if (converting) View.VISIBLE else View.VISIBLE
         if (!converting) binding.progressBar.visibility = View.VISIBLE  // 保留显示最终值
     }
