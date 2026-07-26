@@ -1524,7 +1524,7 @@ class MainActivity : AppCompatActivity() {
                 if (source.isDirectory) source.name else source.nameWithoutExtension.ifBlank { source.name }
             }
         } else {
-            "archive-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())}"
+            "archive-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())}"
         }
 
     private fun stripArchiveExtension(name: String): String =

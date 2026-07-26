@@ -28,7 +28,7 @@ class WhisperSettingsActivity : AppCompatActivity() {
         binding.layoutFixedSegment.visibility = View.GONE
 
         binding.sliderWhisperThreads.addOnChangeListener { _, value, _ ->
-            binding.tvWhisperThreads.text = value.toInt().toString()
+            binding.tvWhisperThreads.text = String.format(Locale.getDefault(), "%d", value.toInt())
             if (!loading) settings.setSpeechWhisperThreads(value.toInt())
         }
         binding.switchHotwords.setOnCheckedChangeListener { _, checked ->
@@ -44,7 +44,11 @@ class WhisperSettingsActivity : AppCompatActivity() {
 
         loading = true
         binding.sliderWhisperThreads.value = settings.getSpeechWhisperThreads().toFloat()
-        binding.tvWhisperThreads.text = settings.getSpeechWhisperThreads().toString()
+        binding.tvWhisperThreads.text = String.format(
+            Locale.getDefault(),
+            "%d",
+            settings.getSpeechWhisperThreads()
+        )
         binding.switchHotwords.isChecked = settings.isSpeechHotwordsEnabled()
         binding.etHotwords.setText(settings.getSpeechHotwords())
         binding.sliderHotwordsScore.value = settings.getSpeechHotwordsScore()

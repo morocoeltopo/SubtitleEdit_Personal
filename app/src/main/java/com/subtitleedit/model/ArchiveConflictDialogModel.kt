@@ -1,6 +1,7 @@
 package com.subtitleedit.model
 
 import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,7 +30,8 @@ object ArchiveConflictDialogFormatter {
             unitIndex++
         } while (value >= 1024.0 && unitIndex < units.lastIndex)
 
-        return DecimalFormat("0.##").format(value) + units[unitIndex]
+        return DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.getDefault()))
+            .format(value) + units[unitIndex]
     }
 
     fun modifiedTime(modifiedAtMillis: Long?): String {

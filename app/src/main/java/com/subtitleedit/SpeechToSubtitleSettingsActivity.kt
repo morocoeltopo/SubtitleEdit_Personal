@@ -50,7 +50,7 @@ class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
         }
 
         binding.sliderFixedSegmentSeconds.addOnChangeListener { _, value, fromUser ->
-            if (fromUser) binding.etFixedSegmentSeconds.setText(value.toInt().toString())
+            if (fromUser) binding.etFixedSegmentSeconds.setText(String.format(Locale.US, "%d", value.toInt()))
             if (!loading) settingsManager.setSpeechFixedSegmentSeconds(value.toInt())
         }
         binding.etFixedSegmentSeconds.addTextChangedListener(simpleTextWatcher {
@@ -73,7 +73,7 @@ class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
             if (!loading) settingsManager.setSpeechHotwordsScore(value)
         }
         binding.sliderWhisperThreads.addOnChangeListener { _, value, _ ->
-            binding.tvWhisperThreads.text = value.toInt().toString()
+            binding.tvWhisperThreads.text = String.format(Locale.getDefault(), "%d", value.toInt())
             if (!loading) settingsManager.setSpeechWhisperThreads(value.toInt())
         }
     }
@@ -83,7 +83,7 @@ class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
 
         val segmentSeconds = settingsManager.getSpeechFixedSegmentSeconds()
         binding.sliderFixedSegmentSeconds.value = segmentSeconds.toFloat()
-        binding.etFixedSegmentSeconds.setText(segmentSeconds.toString())
+        binding.etFixedSegmentSeconds.setText(String.format(Locale.US, "%d", segmentSeconds))
 
         binding.switchHotwords.isChecked = settingsManager.isSpeechHotwordsEnabled()
         binding.etHotwords.setText(settingsManager.getSpeechHotwords())
@@ -94,7 +94,7 @@ class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
 
         val whisperThreads = settingsManager.getSpeechWhisperThreads()
         binding.sliderWhisperThreads.value = whisperThreads.toFloat()
-        binding.tvWhisperThreads.text = whisperThreads.toString()
+        binding.tvWhisperThreads.text = String.format(Locale.getDefault(), "%d", whisperThreads)
 
         loading = false
     }

@@ -11,6 +11,7 @@ import com.subtitleedit.databinding.ActivitySettingsBinding
 import com.subtitleedit.util.FileUtils
 import com.subtitleedit.util.SettingsManager
 import java.io.File
+import java.util.Locale
 
 /**
  * 设置界面
@@ -187,8 +188,8 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun formatSize(bytes: Long): String = when {
         bytes < 1024L        -> "$bytes B"
-        bytes < 1024L * 1024 -> "${"%.1f".format(bytes / 1024.0)} KB"
-        else                 -> "${"%.2f".format(bytes / 1024.0 / 1024.0)} MB"
+        bytes < 1024L * 1024 -> "${"%.1f".format(Locale.getDefault(), bytes / 1024.0)} KB"
+        else                 -> "${"%.2f".format(Locale.getDefault(), bytes / 1024.0 / 1024.0)} MB"
     }
 
     private fun confirmClearWaveformCache(size: Long) {

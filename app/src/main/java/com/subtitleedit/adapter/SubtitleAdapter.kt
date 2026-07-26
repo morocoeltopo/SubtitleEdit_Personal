@@ -19,6 +19,7 @@ import com.subtitleedit.model.SubtitleEntry
 import com.subtitleedit.util.TimeUtils
 import java.util.Collections
 import java.util.IdentityHashMap
+import java.util.Locale
 
 /**
  * 字幕列表适配器
@@ -283,7 +284,7 @@ class SubtitleAdapter(
 
         fun bind(entry: SubtitleEntry, position: Int, isSelected: Boolean) {
             // 设置序号
-            tvIndex.text = entry.index.toString()
+            tvIndex.text = String.format(Locale.getDefault(), "%d", entry.index)
 
             // 设置时间轴
             tvStartTime.text = TimeUtils.formatForInput(entry.startTime)

@@ -3661,7 +3661,7 @@ class EditorActivity : AppCompatActivity() {
         val input = EditText(this).apply {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER or
                         android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
-            setText(playbackSpeed.toString())
+            setText(formatPlaybackSpeedValue(playbackSpeed))
             hint = "例如：0.5、1.0、1.5、2.0"
             selectAll()
             setPadding(48, 32, 48, 16)
@@ -3705,7 +3705,7 @@ class EditorActivity : AppCompatActivity() {
             "${speed.toLong()}×"
         } else {
             // 最多保留两位有效小数，去掉末尾 0
-            "%.2f".format(speed).trimEnd('0').trimEnd('.') + "×"
+            formatPlaybackSpeedValue(speed) + "×"
         }
         binding.tvPlaybackSpeed.text = label
 
@@ -3720,5 +3720,8 @@ class EditorActivity : AppCompatActivity() {
 
         com.subtitleedit.util.OverwritingToast.makeText(this, "播放速率已设置为 ${label}", Toast.LENGTH_SHORT).show()
     }
+
+    private fun formatPlaybackSpeedValue(speed: Float): String =
+        String.format(Locale.US, "%.2f", speed).trimEnd('0').trimEnd('.')
 }
 

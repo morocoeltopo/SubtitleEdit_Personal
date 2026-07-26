@@ -12,6 +12,7 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.util.Locale
 import kotlin.math.min
 
 /**
@@ -67,7 +68,7 @@ class VocalSeparationEngine(
         log("模型：$modelDisplayName${modelSize?.let { "，大小 ${formatBytes(it)}" }.orEmpty()}")
         log("输入张量：$INPUT_NAME [1, 2, $SEGMENT]")
         log("输出张量：$OUTPUT_NAME [1, 4, 2, $SEGMENT]")
-        log("分块参数：44.1kHz / 双声道 / ${"%.2f".format(SEGMENT / SAMPLE_RATE.toDouble())}秒 / 25% 重叠")
+        log("分块参数：44.1kHz / 双声道 / ${"%.2f".format(Locale.getDefault(), SEGMENT / SAMPLE_RATE.toDouble())}秒 / 25% 重叠")
         log(
             "ORT 线程：$threadCount；图优化：${enabledText(graphOptimizationEnabled)}；" +
                 "CPU arena：${enabledText(cpuArenaEnabled)}"
@@ -182,7 +183,7 @@ class VocalSeparationEngine(
                     }
 
                     val elapsed = System.currentTimeMillis() - chunkStartedAt
-                    log("分块 ${chunkIndex + 1}/$chunkCount 完成：输入 ${"%.2f".format(chunkLength / SAMPLE_RATE.toDouble())} 秒，耗时 ${formatDuration(elapsed)}")
+                    log("分块 ${chunkIndex + 1}/$chunkCount 完成：输入 ${"%.2f".format(Locale.getDefault(), chunkLength / SAMPLE_RATE.toDouble())} 秒，耗时 ${formatDuration(elapsed)}")
                     onProgress(chunkIndex + 1, chunkCount)
                 }
             }
@@ -361,13 +362,13 @@ class VocalSeparationEngine(
         private fun formatDuration(ms: Long): String = if (ms < 1000) {
             "${ms}ms"
         } else {
-            "${"%.1f".format(ms / 1000.0)}s"
+            "${"%.1f".format(Locale.getDefault(), ms / 1000.0)}s"
         }
 
         private fun formatBytes(bytes: Long): String = when {
-            bytes >= 1024L * 1024L * 1024L -> "${"%.2f".format(bytes / (1024.0 * 1024.0 * 1024.0))} GB"
-            bytes >= 1024L * 1024L -> "${"%.2f".format(bytes / (1024.0 * 1024.0))} MB"
-            bytes >= 1024L -> "${"%.2f".format(bytes / 1024.0)} KB"
+            bytes >= 1024L * 1024L * 1024L -> "${"%.2f".format(Locale.getDefault(), bytes / (1024.0 * 1024.0 * 1024.0))} GB"
+            bytes >= 1024L * 1024L -> "${"%.2f".format(Locale.getDefault(), bytes / (1024.0 * 1024.0))} MB"
+            bytes >= 1024L -> "${"%.2f".format(Locale.getDefault(), bytes / 1024.0)} KB"
             else -> "$bytes B"
         }
 

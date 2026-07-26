@@ -35,6 +35,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 /**
  * 媒体格式转换界面
@@ -528,8 +529,8 @@ class MediaConvertActivity : AppCompatActivity() {
         val h = (sec / 3600).toInt()
         val m = ((sec % 3600) / 60).toInt()
         val s = (sec % 60).toInt()
-        return if (h > 0) "%d:%02d:%02d".format(h, m, s)
-        else "%d:%02d".format(m, s)
+        return if (h > 0) "%d:%02d:%02d".format(Locale.getDefault(), h, m, s)
+        else "%d:%02d".format(Locale.getDefault(), m, s)
     }
 
     // ==================== 格式选中 ====================
@@ -908,7 +909,7 @@ class MediaConvertActivity : AppCompatActivity() {
 
     private fun formatSize(bytes: Long): String = when {
         bytes < 1024L        -> "$bytes B"
-        bytes < 1024L * 1024 -> "${"%.1f".format(bytes / 1024.0)} KB"
-        else                 -> "${"%.2f".format(bytes / 1024.0 / 1024.0)} MB"
+        bytes < 1024L * 1024 -> "${"%.1f".format(Locale.getDefault(), bytes / 1024.0)} KB"
+        else                 -> "${"%.2f".format(Locale.getDefault(), bytes / 1024.0 / 1024.0)} MB"
     }
 }

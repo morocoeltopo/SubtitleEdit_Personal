@@ -497,12 +497,13 @@ class VocalSeparationActivity : AppCompatActivity() {
     }
 
     private fun formatBytes(bytes: Long): String = when {
-        bytes >= 1024L * 1024L * 1024L -> "${"%.2f".format(bytes / (1024.0 * 1024.0 * 1024.0))} GB"
-        bytes >= 1024L * 1024L -> "${"%.2f".format(bytes / (1024.0 * 1024.0))} MB"
-        else -> "${"%.1f".format(bytes / 1024.0)} KB"
+        bytes >= 1024L * 1024L * 1024L -> "${"%.2f".format(Locale.getDefault(), bytes / (1024.0 * 1024.0 * 1024.0))} GB"
+        bytes >= 1024L * 1024L -> "${"%.2f".format(Locale.getDefault(), bytes / (1024.0 * 1024.0))} MB"
+        else -> "${"%.1f".format(Locale.getDefault(), bytes / 1024.0)} KB"
     }
 
-    private fun formatDuration(ms: Long): String = "${"%.1f".format(ms / 1000.0)} 秒"
+    private fun formatDuration(ms: Long): String =
+        "${"%.1f".format(Locale.getDefault(), ms / 1000.0)} 秒"
 
     override fun onDestroy() {
         if (isRunning) {
