@@ -2,6 +2,7 @@ package com.subtitleedit.util
 
 import com.subtitleedit.model.SubtitleEntry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -15,6 +16,41 @@ class SubtitleEntryOpsTest {
         val copied = SubtitleEntryOps.deepCopy(original)
         copied[0].text = "changed"
         assertEquals("a", original[0].text)
+    }
+
+    @Test
+    fun deepCopy_listPreservesOrderAndFields() {
+        val original = listOf(
+            SubtitleEntry(index = 1, startTime = 0, endTime = 1000, text = "a"),
+            SubtitleEntry(index = 2, startTime = 1000, endTime = 2000, text = "b")
+        )
+        val copied = SubtitleEntryOps.deepCopy(original)
+        assertEquals(original.size, copied.size)
+        assertEquals(original, copied)
+        assertEquals(listOf(1, 2), copied.map { it.index })
+    }
+
+    @Test
+    fun deepCopy_singleEntryIsIndependent() {
+        val original = SubtitleEntry(index = 1, startTime = 0, endTime = 1000, text = "a")
+        val copied = SubtitleEntryOps.deepCopy(original)
+
+        assertEquals(original, copied)
+        assertNotSame(original, copied)
+
+        copied.text = "changed"
+        copied.startTime = 500
+        copied.endTime = 1500
+        copied.index = 9
+        assertEquals("a", original.text)
+        assertEquals(0L, original.startTime)
+        assertEquals(1000L, original.endTime)
+        assertEquals(1, original.index)
+    }
+
+    @Test
+    fun deepCopy_emptyListReturnsEmpty() {
+        assertTrue(SubtitleEntryOps.deepCopy(emptyList()).isEmpty())
     }
 
     // ==================== createInsertedEntry（向后插入） ====================
