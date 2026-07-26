@@ -11,7 +11,6 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
-import android.view.MotionEvent
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -36,9 +35,9 @@ import com.subtitleedit.adapter.TranslationPreviewItem
 import com.subtitleedit.databinding.ActivityEditorBinding
 import com.subtitleedit.editor.EditorPlaybackController
 import com.subtitleedit.editor.EditorSearchController
+import com.subtitleedit.editor.EditorWaveformController
 import com.subtitleedit.util.AiTranslator
 import com.subtitleedit.util.AiProviderConfig
-import com.subtitleedit.view.WaveformTimelineView
 import com.subtitleedit.util.DraftManager
 import com.subtitleedit.util.FileUtils
 import com.subtitleedit.util.CutPasteController
@@ -59,7 +58,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.subtitleedit.audio.FfmpegWaveformChunkLoader
 import com.arthenica.ffmpegkit.FFmpegKit
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
@@ -136,34 +134,12 @@ class EditorActivity : AppCompatActivity() {
     
     // 音频文件相关
     private var isAudioFile: Boolean = false
-    private var audioFilePath: String = ""
     private lateinit var playbackController: EditorPlaybackController
-    
-    // FFmpeg 波形加载器
-    private var ffmpegChunkLoader: FfmpegWaveformChunkLoader? = null
+    private lateinit var waveformController: EditorWaveformController
     
     // 临时修复的 WAV 文件（start time 不为 0 时生成）
     private var tempFixedWavFile: File? = null
     
-    // 波形图展开状态（提升为 class 级别，避免 setupAudioPlayer 重复调用时状态丢失）
-    private var isWaveformExpanded = true
-
-    // 频谱图
-    private var currentDisplayMode = WaveformTimelineView.DisplayMode.WAVEFORM
-    private var spectrogramFile: File? = null
-
-    // 频谱图生成进度追踪
-    private var spectrogramTotalChunks = 0
-    private var spectrogramDoneChunks = 0
-    private var spectrogramIsGenerating = false
-
-    // 手动生成状态：false = 未生成/未触发，true = 已触发或缓存已就绪
-    private var isWaveformGenerated = false
-    private var isSpectrogramGenerationStarted = false
-    
-    // 【新增】标记波形图是否正在后台生成中，防止状态丢失和重复生成
-    private var isWaveformGenerating = false
-
     // 文件选择器
     private val openFileLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -226,7 +202,8 @@ class EditorActivity : AppCompatActivity() {
         setupSourceView()
         setupSearchController()
         setupPlaybackController()
-        setupAudioPlayer()
+        setupWaveformController()
+        setupAudioActions()
         setupBackPressedHandler()
         
         if (filePath.isNotEmpty()) {
@@ -414,6 +391,30 @@ class EditorActivity : AppCompatActivity() {
             showMessage = ::showShortToast
         )
         playbackController.bind()
+    }
+
+    private fun setupWaveformController() {
+        waveformController = EditorWaveformController(
+            context = this,
+            binding = binding,
+            scope = lifecycleScope,
+            isAudioFile = isAudioFile,
+            appCacheDir = cacheDir,
+            currentPlaybackPositionMs = { playbackController.currentPositionMs },
+            onSubtitlesChanged = { updatedSubtitles ->
+                setSubtitleEntries(updatedSubtitles)
+                submitSubtitleList(refreshAll = true, syncWaveform = false, markChanged = true)
+            },
+            onSelectedIndexChanged = { index ->
+                if (index in subtitleEntries.indices) {
+                    (binding.rvSubtitles.layoutManager as? LinearLayoutManager)
+                        ?.scrollToPositionWithOffset(index, 0)
+                }
+            },
+            onTimestampInserted = ::insertSubtitleFromTimestamp,
+            showMessage = ::showShortToast
+        )
+        waveformController.bind()
     }
     
     private fun updateSelectedCountDisplay() {
@@ -1197,13 +1198,11 @@ class EditorActivity : AppCompatActivity() {
     }
 
     private fun syncWaveformSubtitles() {
-        if (!isAudioFile) return
-        binding.waveformTimelineView.setSubtitles(subtitleEntries.toList())
+        waveformController.setSubtitles(subtitleEntries.toList())
     }
 
     private fun setWaveformSubtitlesKeepSelection(selectedIndex: Int) {
-        if (!isAudioFile) return
-        binding.waveformTimelineView.setSubtitlesKeepSelection(subtitleEntries.toList(), selectedIndex)
+        waveformController.setSubtitlesKeepSelection(subtitleEntries.toList(), selectedIndex)
     }
 
     private fun submitSubtitleList(
@@ -1501,9 +1500,7 @@ class EditorActivity : AppCompatActivity() {
             }
         }
         // 同步字幕到波形视图，保持选中状态
-        if (isAudioFile) {
-            binding.waveformTimelineView.setSubtitlesAfterDelete(subtitleEntries.toList(), deletedIndices)
-        }
+        waveformController.setSubtitlesAfterDelete(subtitleEntries.toList(), deletedIndices)
     }
 
     /**
@@ -2211,9 +2208,7 @@ class EditorActivity : AppCompatActivity() {
         textToSpeech = null
         super.onDestroy()
         playbackController.release()
-        // 释放波形加载器
-        ffmpegChunkLoader?.release()
-        ffmpegChunkLoader = null
+        waveformController.release()
         // 清理临时修复的 WAV 文件
         tempFixedWavFile?.let { file ->
             if (file.exists() && !file.delete()) {
@@ -2283,129 +2278,8 @@ class EditorActivity : AppCompatActivity() {
         }
     }
     
-    /**
-     * 设置音频播放器 UI
-     */
-    private fun setupAudioPlayer() {
-        if (!isAudioFile) {
-            binding.audioPlayerContainer.visibility = android.view.View.GONE
-            return
-        }
-        
-        binding.audioPlayerContainer.visibility = android.view.View.VISIBLE
-        
-        // 设置音频文件名
-        currentFile?.let {
-            binding.tvAudioFileName.text = it.name
-        }
-        
-        // 设置字幕变化监听器
-        binding.waveformTimelineView.onSubtitleChangeListener = { updatedSubtitles ->
-            // 更新字幕列表
-            setSubtitleEntries(updatedSubtitles)
-            submitSubtitleList(refreshAll = true, syncWaveform = false, markChanged = true)
-        }
-        
-        // 设置选中状态变化监听器（波形时间轴选中状态变化时的处理）
-        binding.waveformTimelineView.onSelectedIndicesChangeListener = { indices ->
-            // 不同步选中状态到字幕列表，保持两者独立
-            // 只处理循环播放和滚动逻辑
-            if (indices.isNotEmpty()) {
-                val firstSelectedIndex = indices.first()
-                if (firstSelectedIndex >= 0 && firstSelectedIndex < subtitleEntries.size) {
-                    // 波形图选中字幕时始终将对应行定位到列表顶部，避免受当前滚动方向影响。
-                    (binding.rvSubtitles.layoutManager as? LinearLayoutManager)
-                        ?.scrollToPositionWithOffset(firstSelectedIndex, 0)
-                }
-            }
-        }
-        
-        // ——— 展开/折叠 ———
-        binding.btnToggleWaveform.setOnClickListener {
-            isWaveformExpanded = !isWaveformExpanded
-            binding.timelineContainer.visibility =
-                if (isWaveformExpanded) android.view.View.VISIBLE else android.view.View.GONE
-            binding.btnToggleWaveform.text =
-                if (isWaveformExpanded) "▼" else "▶"
-            updateGenerateButton()
-            refreshWaveformToolbarState()
-        }
-
-        // ——— 模式切换 ———
-        binding.btnToggleDisplayMode.setOnClickListener {
-            currentDisplayMode =
-                if (currentDisplayMode == WaveformTimelineView.DisplayMode.WAVEFORM)
-                    WaveformTimelineView.DisplayMode.SPECTROGRAM
-                else WaveformTimelineView.DisplayMode.WAVEFORM
-
-            binding.waveformTimelineView.setDisplayMode(currentDisplayMode)
-
-            if (currentDisplayMode == WaveformTimelineView.DisplayMode.SPECTROGRAM) {
-                // 切换到频谱图时，检查是否已经启动过生成
-                if (isSpectrogramGenerationStarted) {
-                    // 如果之前已经启动过生成，切回来时直接恢复状态并刷新可见区域
-                    // 只要已完成的分块还没达到总数，就认为还在生成中
-                    spectrogramIsGenerating = spectrogramDoneChunks < spectrogramTotalChunks
-                    binding.waveformTimelineView.refreshVisibleChunks()
-                } else {
-                    // 只有在完全没有启动过生成的情况下，才初始化这些重置状态
-                    binding.waveformTimelineView.resetSpectrogramCache()
-                    spectrogramTotalChunks = calcTotalChunks()
-                    spectrogramDoneChunks = 0
-                    spectrogramIsGenerating = false
-                }
-            }
-
-            updateGenerateButton()
-            refreshWaveformToolbarState()
-        }
-
-        // ——— 频谱图分块回调 ———
-        binding.waveformTimelineView.onSpectrogramChunkRequest =
-            { chunkIndex, startMs, endMs, widthPx, heightPx ->
-                // 只有用户手动点击生成后才真正执行
-                if (isSpectrogramGenerationStarted) {
-                    generateSpectrogramChunkAsync(chunkIndex, startMs, endMs, widthPx, heightPx)
-                }
-            }
-
-        // ——— 振幅缩放 ———
-        binding.btnAmplitudeZoomIn.setOnClickListener {
-            binding.waveformTimelineView.zoomInAmplitude()
-        }
-        binding.btnAmplitudeZoomIn.setOnLongClickListener {
-            binding.waveformTimelineView.resetAmplitudeScale()
-            com.subtitleedit.util.OverwritingToast.makeText(this, "振幅已重置", Toast.LENGTH_SHORT).show()
-            true
-        }
-        binding.btnAmplitudeZoomOut.setOnClickListener {
-            binding.waveformTimelineView.zoomOutAmplitude()
-        }
-
-        // ——— 手动生成按钮 ———
-        binding.btnGenerateCache.setOnClickListener {
-            if (currentDisplayMode == WaveformTimelineView.DisplayMode.WAVEFORM) {
-                startWaveformGeneration()
-            } else {
-                startSpectrogramGeneration()
-            }
-        }
-
-        // ——— 打轴按钮 ———
-        var timestampStartMs = 0L
-        binding.btnInsertSubtitle.setOnLongClickListener {
-            timestampStartMs = playbackController.currentPositionMs
-            binding.waveformTimelineView.startTimestamping(timestampStartMs)
-            true
-        }
-        binding.btnInsertSubtitle.setOnTouchListener { _, event ->
-            if ((event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL)
-                && binding.waveformTimelineView.isInTimestampingMode()) {
-                val endMs = binding.waveformTimelineView.stopTimestamping()
-                insertSubtitleFromTimestamp(timestampStartMs, endMs)
-            }
-            false
-        }
+    private fun setupAudioActions() {
+        if (!isAudioFile) return
 
         binding.btnQuickTranscribe.setOnClickListener {
             showQuickTranscribe()
@@ -2570,32 +2444,6 @@ class EditorActivity : AppCompatActivity() {
         }
     }
 
-    /** 计算频谱图总 chunk 数 */
-    private fun calcTotalChunks(): Int {
-        if (playbackController.durationMs <= 0) return 0
-        val chunkMs = WaveformTimelineView.CHUNK_DURATION_MS
-        return ((playbackController.durationMs + chunkMs - 1) / chunkMs).toInt()
-    }
-
-    /** 根据当前展开状态和显示模式，同步工具栏按钮文字和可用状态 */
-    private fun refreshWaveformToolbarState() {
-        val isSpectrogram = currentDisplayMode == WaveformTimelineView.DisplayMode.SPECTROGRAM
-
-        // 模式切换按钮文字：显示当前正在展示的模式
-        (binding.btnToggleDisplayMode as? android.widget.TextView)?.text =
-            if (isSpectrogram) "频谱" else "波形"
-
-        // 振幅按钮：频谱模式下或折叠时禁用
-        val amplEnabled = isWaveformExpanded && !isSpectrogram
-        binding.btnAmplitudeZoomIn.isEnabled  = amplEnabled
-        binding.btnAmplitudeZoomOut.isEnabled = amplEnabled
-        val color = if (amplEnabled) "#CCCCCC" else "#555555"
-        (binding.btnAmplitudeZoomIn  as? android.widget.TextView)
-            ?.setTextColor(android.graphics.Color.parseColor(color))
-        (binding.btnAmplitudeZoomOut as? android.widget.TextView)
-            ?.setTextColor(android.graphics.Color.parseColor(color))
-    }
-    
     /**
      * 加载音频文件
      */
@@ -2647,7 +2495,6 @@ class EditorActivity : AppCompatActivity() {
      * 实际执行音频加载（原 loadAudioFile 的主体逻辑）
      */
     private fun doLoadAudioFile(audioFile: File, subtitleFilePath: String?) {
-        audioFilePath = audioFile.absolutePath
         supportActionBar?.title = subtitleFilePath?.let { File(it).name } ?: "（无字幕文件）"
         
         try {
@@ -2670,214 +2517,13 @@ class EditorActivity : AppCompatActivity() {
             submitSubtitleList(refreshAll = true, syncWaveform = false)
         }
         
-        binding.waveformTimelineView.initialize(playbackController.durationMs, subtitleEntries.toList())
-        restoreSpectrogramCacheState(audioFile)
-        // 首次打开时 View 可能尚未完成布局，布局后再补一次精确尺寸检测。
-        binding.waveformTimelineView.post {
-            restoreSpectrogramCacheState(audioFile)
-            updateGenerateButton()
-        }
-        
-        // 波形缓存使用修复后的音频文件
-        val settingsManager = SettingsManager.getInstance(this)
-        val cacheDir: File? = when (settingsManager.getWaveformCacheLocation()) {
-            SettingsManager.WAVEFORM_CACHE_APP -> File(cacheDir, "waveform")
-            else -> null   // null = 与音频同目录
-        }
-        
-        ffmpegChunkLoader = FfmpegWaveformChunkLoader(lifecycleScope)
-        ffmpegChunkLoader?.prepare(audioFile.absolutePath, playbackController.durationMs, cacheDir)
-        
-        if (ffmpegChunkLoader?.isCacheReady() == true) {
-            // 缓存已存在，直接连接，不显示按钮
-            isWaveformGenerated = true
-            connectWaveformLoader()
-        } else {
-            // 需要手动生成
-            isWaveformGenerated = false
-            updateGenerateButton()
-        }
-        
-        // 初始状态下同步生成按钮
-        if (isAudioFile) updateGenerateButton()
+        waveformController.load(
+            audioFile,
+            playbackController.durationMs,
+            subtitleEntries.toList()
+        )
     }
 
-    /**
-     * 异步生成某个 chunk 的频谱图（分块版本）
-     * 每个 chunk 按当前 View 宽度生成对应 30s 的频谱图，保证 1:1 像素精度
-     */
-    private fun generateSpectrogramChunkAsync(
-        chunkIndex: Int,
-        startMs: Long, endMs: Long,
-        widthPx: Int, heightPx: Int
-    ) {
-        val audioFile = audioFilePath.takeIf { it.isNotEmpty() }?.let { File(it) } ?: currentFile ?: return
-        val cacheBaseDir = spectrogramCacheBaseDir(audioFile)
-        cacheBaseDir.mkdirs()
-
-        val specFile = File(cacheBaseDir,
-            "${audioFile.nameWithoutExtension}.spec_${chunkIndex}_${widthPx}x${heightPx}.png")
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            val bmp: android.graphics.Bitmap? = if (specFile.exists() && specFile.length() > 0) {
-                // 缓存命中，不算作"新生成"，直接回调
-                android.graphics.BitmapFactory.decodeFile(specFile.absolutePath)
-            } else {
-                val startSec = startMs / 1000.0
-                val durSec   = (endMs - startMs) / 1000.0
-                val cmd = "-y -ss $startSec -t $durSec " +
-                          "-i \"${audioFile.absolutePath}\" " +
-                          "-lavfi showspectrumpic=s=${widthPx}x${heightPx}:" +
-                          "mode=combined:color=intensity:scale=log:legend=0 " +
-                          "-frames:v 1 \"${specFile.absolutePath}\""
-
-                val session = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
-                if (session.getReturnCode()?.isValueSuccess() == true && specFile.exists())
-                    android.graphics.BitmapFactory.decodeFile(specFile.absolutePath)
-                else null
-            }
-
-            withContext(Dispatchers.Main) {
-                if (bmp != null) {
-                    binding.waveformTimelineView.updateSpectrogramChunk(chunkIndex, bmp)
-
-                    // 更新进度：只在本次切换触发的生成流程中计数
-                    if (spectrogramIsGenerating) {
-                        spectrogramDoneChunks++
-                        if (spectrogramDoneChunks >= spectrogramTotalChunks) {
-                            spectrogramIsGenerating = false
-                            com.subtitleedit.util.OverwritingToast.makeText(
-                                this@EditorActivity,
-                                "频谱图缓存生成完成",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /** 恢复已完整生成的频谱缓存状态，避免重新打开音频后再次显示生成按钮。 */
-    private fun restoreSpectrogramCacheState(audioFile: File) {
-        spectrogramTotalChunks = calcTotalChunks()
-        spectrogramDoneChunks = 0
-        spectrogramIsGenerating = false
-        isSpectrogramGenerationStarted = hasCompleteSpectrogramCache(audioFile, spectrogramTotalChunks)
-        if (isSpectrogramGenerationStarted) {
-            spectrogramDoneChunks = spectrogramTotalChunks
-        }
-    }
-
-    private fun hasCompleteSpectrogramCache(audioFile: File, totalChunks: Int): Boolean {
-        if (totalChunks <= 0) return false
-        val dimensions = binding.waveformTimelineView.getSpectrogramCacheDimensions() ?: return false
-        val (width, height) = dimensions
-        val cacheBaseDir = spectrogramCacheBaseDir(audioFile)
-        val prefix = "${audioFile.nameWithoutExtension}.spec_"
-        return (0 until totalChunks).all { chunkIndex ->
-            File(cacheBaseDir, "${prefix}${chunkIndex}_${width}x${height}.png")
-                .let { it.isFile && it.length() > 0L }
-        }
-    }
-
-    private fun spectrogramCacheBaseDir(audioFile: File): File {
-        val settingsManager = SettingsManager.getInstance(this)
-        return when (settingsManager.getWaveformCacheLocation()) {
-            SettingsManager.WAVEFORM_CACHE_APP -> File(cacheDir, "waveform")
-            else -> audioFile.parentFile ?: File(cacheDir, "waveform")
-        }.apply { mkdirs() }
-    }
-
-    /**
-     * 根据当前模式和生成状态，更新生成按钮的可见性和文字
-     */
-    private fun updateGenerateButton() {
-        val needsGenerate = when (currentDisplayMode) {
-            WaveformTimelineView.DisplayMode.WAVEFORM    -> !isWaveformGenerated
-            WaveformTimelineView.DisplayMode.SPECTROGRAM -> !isSpectrogramGenerationStarted
-        }
-        binding.btnGenerateCache.visibility =
-            if (needsGenerate && isWaveformExpanded) android.view.View.VISIBLE
-            else android.view.View.GONE
-
-        // 根据模式和正在生成的状态更新按钮文字和可点击性
-        if (currentDisplayMode == WaveformTimelineView.DisplayMode.WAVEFORM) {
-            if (isWaveformGenerating) {
-                binding.btnGenerateCache.text = "生成中..."
-                binding.btnGenerateCache.isEnabled = false
-            } else {
-                binding.btnGenerateCache.text = "生成波形图"
-                binding.btnGenerateCache.isEnabled = true
-            }
-        } else {
-            binding.btnGenerateCache.text = "生成频谱图"
-            // 频谱图一旦开始就会隐藏按钮，所以只要显示就一定是可用的
-            binding.btnGenerateCache.isEnabled = true 
-        }
-    }
-
-    /**
-     * 用户点击生成 → 开始波形缓存生成
-     */
-    private fun startWaveformGeneration() {
-        // 标记为正在生成
-        isWaveformGenerating = true
-        updateGenerateButton()
-        
-        com.subtitleedit.util.OverwritingToast.makeText(this, "正在生成波形缓存，请稍候...", Toast.LENGTH_SHORT).show()
-        ffmpegChunkLoader?.generateCache { success ->
-            // 回调结束，重置生成中状态
-            isWaveformGenerating = false
-            
-            if (success) {
-                isWaveformGenerated = true
-                com.subtitleedit.util.OverwritingToast.makeText(this, "波形缓存生成完成", Toast.LENGTH_SHORT).show()
-                connectWaveformLoader()
-            } else {
-                com.subtitleedit.util.OverwritingToast.makeText(this, "波形缓存生成失败", Toast.LENGTH_SHORT).show()
-            }
-            updateGenerateButton()
-        }
-    }
-
-    /**
-     * 用户点击生成 → 开始频谱图生成（解锁 chunk 回调）
-     */
-    private fun startSpectrogramGeneration() {
-        isSpectrogramGenerationStarted = true
-        spectrogramTotalChunks = calcTotalChunks()
-        spectrogramDoneChunks = 0
-        spectrogramIsGenerating = spectrogramTotalChunks > 0
-        updateGenerateButton()
-        com.subtitleedit.util.OverwritingToast.makeText(this, "正在生成频谱图缓存，请稍候...", Toast.LENGTH_SHORT).show()
-        
-        // 【关键修复】重置 View 内部的 Spectrogram 缓存状态
-        // 这会清除 View 内部记录的"已请求 Chunk"列表，
-        // 防止之前被忽略的初始可见区块请求（如开头 3 分钟）被判定为重复请求而跳过。
-        binding.waveformTimelineView.resetSpectrogramCache()
-        
-        // 触发可见区域的 chunk 请求
-        binding.waveformTimelineView.refreshVisibleChunks()
-    }
-
-    /**
-     * 连接波形加载器到 View
-     */
-    private fun connectWaveformLoader() {
-        binding.waveformTimelineView.onChunkLoadRequest = { chunkIndex, startMs, endMs, targetSamples ->
-            ffmpegChunkLoader?.requestChunk(chunkIndex, startMs, endMs, targetSamples) { idx, data ->
-                binding.waveformTimelineView.post { 
-                    binding.waveformTimelineView.updateChunk(idx, data) 
-                }
-            }
-        }
-        
-        // 缓存已就绪，重新触发可见区域的 chunk 加载请求
-        // （因为在 initialize() 时可能回调还未设置，导致请求被忽略）
-        binding.waveformTimelineView.refreshVisibleChunks()
-    }
-    
     /**
      * 加载字幕文件
      */
