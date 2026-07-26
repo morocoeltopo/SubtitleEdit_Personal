@@ -4,15 +4,15 @@ import android.app.AlertDialog
 import android.content.Context
 import android.media.MediaPlayer
 import android.media.PlaybackParams
-import android.os.Handler
-import android.os.Looper
 import android.text.InputType
+import android.view.Choreographer
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.SeekBar
 import com.subtitleedit.databinding.ActivityEditorBinding
 import com.subtitleedit.model.SubtitleEntry
 import com.subtitleedit.util.SettingsManager
+import com.subtitleedit.util.SubtitleHighlightCursor
 import com.subtitleedit.util.TimeUtils
 import java.io.File
 import java.util.Locale
@@ -40,44 +40,56 @@ internal class EditorPlaybackController(
     private var limitedPlaybackEntry: SubtitleEntry? = null
     private var isLimitedRangePlaybackActive = false
 
-    private val progressHandler = Handler(Looper.getMainLooper())
-    private val progressRunnable = object : Runnable {
-        override fun run() {
-            mediaPlayer?.let { player ->
-                if (player.isPlaying) {
-                    updatePlayerUi()
-                    highlightSubtitleAtTime(currentPositionMs)
+    private val highlightCursor = SubtitleHighlightCursor()
 
-                    val rangeTarget = limitedPlaybackEntry
-                    if (isLimitedRangePlaybackActive && rangeTarget != null) {
-                        when {
-                            currentPositionMs >= rangeTarget.endTime -> {
-                                if (SettingsManager.getInstance(context)
-                                        .isLoopSelectedSubtitleEnabled()
-                                ) {
-                                    player.seekTo(rangeTarget.startTime.toInt())
-                                    updatePlayerUiAtKnownPosition(rangeTarget.startTime)
-                                } else {
-                                    player.pause()
-                                    player.seekTo(rangeTarget.endTime.toInt())
-                                    isPlaying = false
-                                    isLimitedRangePlaybackActive = false
-                                    stopProgressUpdate()
-                                    updatePlayerUiAtKnownPosition(rangeTarget.endTime)
-                                    return
-                                }
-                            }
-                            currentPositionMs < rangeTarget.startTime -> {
-                                player.seekTo(rangeTarget.startTime.toInt())
-                                updatePlayerUiAtKnownPosition(rangeTarget.startTime)
-                            }
-                        }
+    // 每个 vsync 刷新一次即可：屏幕最高 120Hz，更高频率只是白烧 CPU 和 Binder IPC。
+    private val frameCallback = Choreographer.FrameCallback { onProgressFrame() }
+    private var progressScheduled = false
+
+    private var lastPlayPauseShowsPause: Boolean? = null
+    private var lastTotalTimeText: String? = null
+
+    private fun onProgressFrame() {
+        progressScheduled = false
+        val player = mediaPlayer ?: return
+        if (!player.isPlaying) return
+        isPlaying = true
+        renderPlayPauseIcon()
+
+        if (!isUserSeeking) {
+            val position = player.currentPosition.toLong()
+            if (position >= currentPositionMs || currentPositionMs - position > 200) {
+                currentPositionMs = position
+            }
+        }
+        renderProgress(currentPositionMs)
+        highlightSubtitleAtTime(currentPositionMs)
+
+        val rangeTarget = limitedPlaybackEntry
+        if (isLimitedRangePlaybackActive && rangeTarget != null) {
+            when {
+                currentPositionMs >= rangeTarget.endTime -> {
+                    if (SettingsManager.getInstance(context).isLoopSelectedSubtitleEnabled()) {
+                        player.seekTo(rangeTarget.startTime.toInt())
+                        updatePlayerUiAtKnownPosition(rangeTarget.startTime)
+                    } else {
+                        player.pause()
+                        player.seekTo(rangeTarget.endTime.toInt())
+                        isPlaying = false
+                        isLimitedRangePlaybackActive = false
+                        stopProgressUpdate()
+                        updatePlayerUiAtKnownPosition(rangeTarget.endTime)
+                        return
                     }
-
-                    progressHandler.postDelayed(this, 4)
+                }
+                currentPositionMs < rangeTarget.startTime -> {
+                    player.seekTo(rangeTarget.startTime.toInt())
+                    updatePlayerUiAtKnownPosition(rangeTarget.startTime)
                 }
             }
         }
+
+        startProgressUpdate()
     }
 
     fun bind() {
@@ -248,15 +260,45 @@ internal class EditorPlaybackController(
         }
     }
 
+    /** 字幕列表结构或时间轴变化后调用，否则高亮游标可能停在旧下标上。 */
+    fun invalidateHighlightCache() {
+        highlightCursor.invalidate()
+    }
+
     private fun highlightSubtitleAtTime(timeMs: Long) {
         if (isSourceViewMode()) return
-        for ((index, entry) in subtitles().withIndex()) {
-            if (timeMs >= entry.startTime && timeMs < entry.endTime) {
-                onPlayingSubtitleChanged(index)
-                return
+        val index = highlightCursor.resolve(subtitles(), timeMs)
+        onPlayingSubtitleChanged(if (index >= 0) index else null)
+    }
+
+    /** 热路径：只写随播放位置变化的三处，不再向 MediaPlayer 多要 duration / isPlaying。 */
+    private fun renderProgress(positionMs: Long) {
+        binding.tvCurrentTime.text = TimeUtils.formatForDisplay(positionMs)
+        if (!isUserSeeking) {
+            binding.seekBar.progress = if (durationMs > 0) {
+                (positionMs * 1000 / durationMs).toInt().coerceIn(0, 1000)
+            } else {
+                0
             }
         }
-        onPlayingSubtitleChanged(null)
+        val wavePosition = if (durationMs > 0) positionMs.toFloat() / durationMs else 0f
+        binding.waveformTimelineView.setCurrentPosition(wavePosition)
+    }
+
+    private fun renderPlayPauseIcon() {
+        if (lastPlayPauseShowsPause == isPlaying) return
+        lastPlayPauseShowsPause = isPlaying
+        binding.btnPlayPause.setImageResource(
+            if (isPlaying) android.R.drawable.ic_media_pause
+            else android.R.drawable.ic_media_play
+        )
+    }
+
+    private fun renderTotalTime() {
+        val text = TimeUtils.formatForDisplay(durationMs)
+        if (lastTotalTimeText == text) return
+        lastTotalTimeText = text
+        binding.tvTotalTime.text = text
     }
 
     private fun updatePlayerUi() {
@@ -271,31 +313,21 @@ internal class EditorPlaybackController(
             isPlaying = player.isPlaying
         }
 
-        binding.btnPlayPause.setImageResource(
-            if (isPlaying) android.R.drawable.ic_media_pause
-            else android.R.drawable.ic_media_play
-        )
-        binding.tvCurrentTime.text = TimeUtils.formatForDisplay(currentPositionMs)
-        binding.tvTotalTime.text = TimeUtils.formatForDisplay(durationMs)
-
-        if (!isUserSeeking) {
-            binding.seekBar.progress = if (durationMs > 0) {
-                (currentPositionMs * 1000 / durationMs).toInt().coerceIn(0, 1000)
-            } else {
-                0
-            }
-        }
-        val wavePosition = if (durationMs > 0) currentPositionMs.toFloat() / durationMs else 0f
-        binding.waveformTimelineView.setCurrentPosition(wavePosition)
+        renderPlayPauseIcon()
+        renderTotalTime()
+        renderProgress(currentPositionMs)
     }
 
     private fun startProgressUpdate() {
-        progressHandler.removeCallbacks(progressRunnable)
-        progressHandler.post(progressRunnable)
+        if (progressScheduled) return
+        progressScheduled = true
+        Choreographer.getInstance().postFrameCallback(frameCallback)
     }
 
     private fun stopProgressUpdate() {
-        progressHandler.removeCallbacks(progressRunnable)
+        if (!progressScheduled) return
+        progressScheduled = false
+        Choreographer.getInstance().removeFrameCallback(frameCallback)
     }
 
     private fun showSpeedInputDialog() {

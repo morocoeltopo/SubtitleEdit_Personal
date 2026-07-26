@@ -1174,6 +1174,7 @@ class EditorActivity : AppCompatActivity() {
         }
         if (syncWaveform) syncWaveformSubtitles()
         if (markChanged) markAsChanged()
+        if (::playbackController.isInitialized) playbackController.invalidateHighlightCache()
         if (::searchController.isInitialized) searchController.onDocumentChanged()
     }
 
@@ -1228,6 +1229,7 @@ class EditorActivity : AppCompatActivity() {
         if (updateFormat) updateFormatInfo()
         if (syncWaveform) syncWaveformSubtitles()
         if (markChanged) markAsChanged()
+        if (::playbackController.isInitialized) playbackController.invalidateHighlightCache()
         if (::searchController.isInitialized) searchController.onDocumentChanged()
     }
     
