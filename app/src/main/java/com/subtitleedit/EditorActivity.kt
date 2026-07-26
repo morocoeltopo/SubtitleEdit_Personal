@@ -29,12 +29,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import android.media.MediaPlayer
 import android.speech.tts.TextToSpeech
 import com.subtitleedit.adapter.SubtitleAdapter
 import com.subtitleedit.adapter.TranslationPreviewAdapter
 import com.subtitleedit.adapter.TranslationPreviewItem
 import com.subtitleedit.databinding.ActivityEditorBinding
+import com.subtitleedit.editor.EditorPlaybackController
 import com.subtitleedit.editor.EditorSearchController
 import com.subtitleedit.util.AiTranslator
 import com.subtitleedit.util.AiProviderConfig
@@ -137,16 +137,7 @@ class EditorActivity : AppCompatActivity() {
     // 音频文件相关
     private var isAudioFile: Boolean = false
     private var audioFilePath: String = ""
-    private var audioDuration: Long = 0L  // 音频总时长（毫秒）
-    private var audioCurrentPosition: Long = 0L  // 当前播放位置（毫秒）
-    private var isPlaying: Boolean = false
-    private var isUserSeeking = false
-    
-    // 播放速率（默认 1.0）
-    private var playbackSpeed: Float = 1.0f
-    
-    // MediaPlayer
-    private var mediaPlayer: MediaPlayer? = null
+    private lateinit var playbackController: EditorPlaybackController
     
     // FFmpeg 波形加载器
     private var ffmpegChunkLoader: FfmpegWaveformChunkLoader? = null
@@ -172,76 +163,6 @@ class EditorActivity : AppCompatActivity() {
     
     // 【新增】标记波形图是否正在后台生成中，防止状态丢失和重复生成
     private var isWaveformGenerating = false
-
-    // 长按字幕块选定的播放区间；只有双击启动后才限制播放行为。
-    private var limitedPlaybackEntry: SubtitleEntry? = null
-    private var isLimitedRangePlaybackActive = false
-
-    // ==================== 播放进度更新相关（类成员变量，避免循环叠加）====================
-    // Handler 和 Runnable 提升为类成员，配合 16ms 更新频率实现 60fps
-    private val progressHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val progressRunnable = object : Runnable {
-        override fun run() {
-            mediaPlayer?.let { player ->
-                if (player.isPlaying) {
-                    updatePlayerUI()
-                    highlightSubtitleAtTime(audioCurrentPosition)
-
-                    // 仅双击启动的限定区间播放才处理边界；普通播放完全不受影响。
-                    val rangeTarget = limitedPlaybackEntry
-                    if (isLimitedRangePlaybackActive && rangeTarget != null) {
-                        when {
-                            audioCurrentPosition >= rangeTarget.endTime -> {
-                                if (SettingsManager.getInstance(this@EditorActivity)
-                                        .isLoopSelectedSubtitleEnabled()
-                                ) {
-                                    player.seekTo(rangeTarget.startTime.toInt())
-                                    updatePlayerUiAtKnownPosition(rangeTarget.startTime)
-                                } else {
-                                    player.pause()
-                                    player.seekTo(rangeTarget.endTime.toInt())
-                                    isPlaying = false
-                                    isLimitedRangePlaybackActive = false
-                                    stopProgressUpdate()
-                                    updatePlayerUiAtKnownPosition(rangeTarget.endTime)
-                                    return
-                                }
-                            }
-                            audioCurrentPosition < rangeTarget.startTime -> {
-                                player.seekTo(rangeTarget.startTime.toInt())
-                                updatePlayerUiAtKnownPosition(rangeTarget.startTime)
-                            }
-                        }
-                    }
-
-                    // 4ms 递归，实现 240fps，适配高刷新率屏幕
-                    progressHandler.postDelayed(this, 4)
-                }
-            }
-        }
-    }
-
-    /**
-     * 开始定时更新播放进度（16ms 间隔，约 60fps）
-     * 关键：先移除已有的回调，确保永远只有一个循环在运行
-     */
-    private fun startProgressUpdate() {
-        // 先移除已有的，确保永远只有一个循环在运行
-        progressHandler.removeCallbacks(progressRunnable)
-        progressHandler.post(progressRunnable)
-    }
-
-    /**
-     * 停止定时更新播放进度
-     * 必须在以下生命周期/状态切换处调用：
-     * 1. onPause()
-     * 2. 播放完成回调 OnCompletionListener
-     * 3. 停止播放按钮点击时
-     * 4. onDestroy() / release()
-     */
-    private fun stopProgressUpdate() {
-        progressHandler.removeCallbacks(progressRunnable)
-    }
 
     // 文件选择器
     private val openFileLauncher = registerForActivityResult(
@@ -304,8 +225,8 @@ class EditorActivity : AppCompatActivity() {
         setupRecyclerView()
         setupSourceView()
         setupSearchController()
+        setupPlaybackController()
         setupAudioPlayer()
-        initializeMediaPlayer()
         setupBackPressedHandler()
         
         if (filePath.isNotEmpty()) {
@@ -473,6 +394,26 @@ class EditorActivity : AppCompatActivity() {
             confirmReplaceAll = ::showReplaceAllConfirm,
             showMessage = ::showShortToast
         )
+    }
+
+    private fun setupPlaybackController() {
+        playbackController = EditorPlaybackController(
+            context = this,
+            binding = binding,
+            isAudioFile = isAudioFile,
+            audioFileName = { currentFile?.name },
+            subtitles = { subtitleEntries },
+            isSourceViewMode = { isSourceViewMode },
+            onPlayingSubtitleChanged = { index ->
+                if (index == null) {
+                    subtitleAdapter.clearPlayingHighlight()
+                } else {
+                    subtitleAdapter.highlightCurrentPlaying(index)
+                }
+            },
+            showMessage = ::showShortToast
+        )
+        playbackController.bind()
     }
     
     private fun updateSelectedCountDisplay() {
@@ -2269,8 +2210,7 @@ class EditorActivity : AppCompatActivity() {
         textToSpeech?.shutdown()
         textToSpeech = null
         super.onDestroy()
-        // 释放 MediaPlayer
-        releaseMediaPlayer()
+        playbackController.release()
         // 释放波形加载器
         ffmpegChunkLoader?.release()
         ffmpegChunkLoader = null
@@ -2344,42 +2284,6 @@ class EditorActivity : AppCompatActivity() {
     }
     
     /**
-     * 初始化 MediaPlayer
-     */
-    private fun initializeMediaPlayer() {
-        if (!isAudioFile) return
-        
-        mediaPlayer = MediaPlayer()
-        mediaPlayer?.setOnCompletionListener {
-            isPlaying = false
-            stopProgressUpdate()
-            updatePlayerUI()
-        }
-        mediaPlayer?.setOnErrorListener { _, what, extra ->
-            com.subtitleedit.util.OverwritingToast.makeText(this, "播放错误：$what, $extra", Toast.LENGTH_SHORT).show()
-            isPlaying = false
-            updatePlayerUI()
-            true
-        }
-    }
-    
-    /**
-     * 释放 MediaPlayer
-     */
-    private fun releaseMediaPlayer() {
-        // 停止进度更新
-        stopProgressUpdate()
-        
-        mediaPlayer?.let { player ->
-            if (player.isPlaying) {
-                player.stop()
-            }
-            player.release()
-            mediaPlayer = null
-        }
-    }
-    
-    /**
      * 设置音频播放器 UI
      */
     private fun setupAudioPlayer() {
@@ -2393,41 +2297,6 @@ class EditorActivity : AppCompatActivity() {
         // 设置音频文件名
         currentFile?.let {
             binding.tvAudioFileName.text = it.name
-        }
-        
-        // 设置时间轴点击监听器
-        binding.waveformTimelineView.onTimelineClickListener = { position ->
-            // 点击时间轴跳转到对应时间
-            val targetTime = (audioDuration * position).toLong()
-            seekTo(targetTime)
-            // 暂停时也要更新 UI，确保播放头位置正确显示
-            updatePlayerUI()
-        }
-
-        binding.waveformTimelineView.onDraggedViewportPlayheadCorrection = { positionMs ->
-            correctPlaybackAfterViewportDrag(positionMs)
-        }
-        binding.waveformTimelineView.onLimitedPlaybackRangeChange = { subtitleIndex ->
-            limitedPlaybackEntry = subtitleIndex?.let { subtitleEntries.getOrNull(it) }
-            isLimitedRangePlaybackActive = false
-        }
-        binding.waveformTimelineView.onLimitedPlaybackStartRequest = { subtitleIndex ->
-            startLimitedRangePlayback(subtitleIndex)
-        }
-        binding.waveformTimelineView.onSubtitleStartSeekRequest = { positionMs ->
-            // 双击未限定的字幕块只移动播放头，保持当前播放/暂停状态。
-            seekTo(positionMs)
-        }
-        binding.waveformTimelineView.onLimitedPlaybackRangeOutOfView = {
-            if (isLimitedRangePlaybackActive) {
-                isLimitedRangePlaybackActive = false
-                mediaPlayer?.let { player ->
-                    if (player.isPlaying) player.pause()
-                }
-                isPlaying = false
-                stopProgressUpdate()
-                updatePlayerUI()
-            }
         }
         
         // 设置字幕变化监听器
@@ -2450,35 +2319,6 @@ class EditorActivity : AppCompatActivity() {
                 }
             }
         }
-        
-        // 播放/暂停按钮
-        binding.btnPlayPause.setOnClickListener {
-            togglePlayPause()
-        }
-        
-        // 进度条拖动 - SeekBar max 为 1000，代表 0-100% 的进度
-        binding.seekBar.max = 1000
-        binding.seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    val targetTime = (audioDuration * progress / 1000).toLong()
-                    audioCurrentPosition = targetTime
-                    binding.tvCurrentTime.text = TimeUtils.formatForDisplay(targetTime)
-                    val wavePosition = if (audioDuration > 0) audioCurrentPosition.toFloat() / audioDuration else 0f
-                    binding.waveformTimelineView.setCurrentPosition(wavePosition)
-                }
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {
-                isUserSeeking = true
-            }
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {
-                isUserSeeking = false
-                seekTo(audioCurrentPosition)
-            }
-        })
-        
-        // 初始化播放器状态
-        updatePlayerUI()
         
         // ——— 展开/折叠 ———
         binding.btnToggleWaveform.setOnClickListener {
@@ -2542,11 +2382,6 @@ class EditorActivity : AppCompatActivity() {
             binding.waveformTimelineView.zoomOutAmplitude()
         }
 
-        // ——— 播放速率按钮 ———
-        binding.tvPlaybackSpeed.setOnClickListener {
-            showSpeedInputDialog()
-        }
-
         // ——— 手动生成按钮 ———
         binding.btnGenerateCache.setOnClickListener {
             if (currentDisplayMode == WaveformTimelineView.DisplayMode.WAVEFORM) {
@@ -2559,7 +2394,7 @@ class EditorActivity : AppCompatActivity() {
         // ——— 打轴按钮 ———
         var timestampStartMs = 0L
         binding.btnInsertSubtitle.setOnLongClickListener {
-            timestampStartMs = audioCurrentPosition
+            timestampStartMs = playbackController.currentPositionMs
             binding.waveformTimelineView.startTimestamping(timestampStartMs)
             true
         }
@@ -2737,9 +2572,9 @@ class EditorActivity : AppCompatActivity() {
 
     /** 计算频谱图总 chunk 数 */
     private fun calcTotalChunks(): Int {
-        if (audioDuration <= 0) return 0
+        if (playbackController.durationMs <= 0) return 0
         val chunkMs = WaveformTimelineView.CHUNK_DURATION_MS
-        return ((audioDuration + chunkMs - 1) / chunkMs).toInt()
+        return ((playbackController.durationMs + chunkMs - 1) / chunkMs).toInt()
     }
 
     /** 根据当前展开状态和显示模式，同步工具栏按钮文字和可用状态 */
@@ -2816,14 +2651,7 @@ class EditorActivity : AppCompatActivity() {
         supportActionBar?.title = subtitleFilePath?.let { File(it).name } ?: "（无字幕文件）"
         
         try {
-            mediaPlayer?.reset()
-            mediaPlayer?.setDataSource(audioFile.absolutePath)
-            mediaPlayer?.prepare()
-            audioDuration = mediaPlayer?.duration?.toLong() ?: 0L
-            // 恢复用户设置的播放速率
-            if (playbackSpeed != 1.0f) {
-                mediaPlayer?.playbackParams = android.media.PlaybackParams().setSpeed(playbackSpeed)
-            }
+            playbackController.prepare(audioFile)
         } catch (e: Exception) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "加载音频失败：${e.message}", Toast.LENGTH_SHORT).show()
         }
@@ -2842,7 +2670,7 @@ class EditorActivity : AppCompatActivity() {
             submitSubtitleList(refreshAll = true, syncWaveform = false)
         }
         
-        binding.waveformTimelineView.initialize(audioDuration, subtitleEntries.toList())
+        binding.waveformTimelineView.initialize(playbackController.durationMs, subtitleEntries.toList())
         restoreSpectrogramCacheState(audioFile)
         // 首次打开时 View 可能尚未完成布局，布局后再补一次精确尺寸检测。
         binding.waveformTimelineView.post {
@@ -2858,7 +2686,7 @@ class EditorActivity : AppCompatActivity() {
         }
         
         ffmpegChunkLoader = FfmpegWaveformChunkLoader(lifecycleScope)
-        ffmpegChunkLoader?.prepare(audioFile.absolutePath, audioDuration, cacheDir)
+        ffmpegChunkLoader?.prepare(audioFile.absolutePath, playbackController.durationMs, cacheDir)
         
         if (ffmpegChunkLoader?.isCacheReady() == true) {
             // 缓存已存在，直接连接，不显示按钮
@@ -2870,7 +2698,6 @@ class EditorActivity : AppCompatActivity() {
             updateGenerateButton()
         }
         
-        updatePlayerUI()
         // 初始状态下同步生成按钮
         if (isAudioFile) updateGenerateButton()
     }
@@ -3068,144 +2895,6 @@ class EditorActivity : AppCompatActivity() {
         }
     }
     
-    /**
-     * 切换播放/暂停状态
-     */
-    private fun togglePlayPause() {
-        mediaPlayer?.let { player ->
-            if (player.isPlaying) {
-                player.pause()
-                isPlaying = false
-                // 暂停时停止进度更新
-                stopProgressUpdate()
-            } else {
-                // 播放按钮代表普通播放，不继承双击启动的限定区间状态。
-                isLimitedRangePlaybackActive = false
-                player.start()
-                isPlaying = true
-                // 开始定时更新 UI
-                startProgressUpdate()
-            }
-            updatePlayerUI()
-        }
-    }
-    
-    /**
-     * 跳转到指定时间
-     */
-    private fun seekTo(timeMs: Long) {
-        // 普通点击/进度条跳转不属于限定区间播放。
-        isLimitedRangePlaybackActive = false
-        val clampedTime = timeMs.coerceIn(0L, audioDuration)
-
-        mediaPlayer?.seekTo(clampedTime.toInt())
-        audioCurrentPosition = clampedTime
-
-        // 高亮显示对应时间的字幕
-        highlightSubtitleAtTime(audioCurrentPosition)
-        
-        // 立即更新 UI（进度条、波形图时间轴线）
-        updatePlayerUI()
-        
-        // 如果之前在播放，继续播放
-        if (isPlaying) {
-            startProgressUpdate()
-        }
-    }
-
-    /** 视口被用户拖动到播放头之外时，将真实播放位置同步到视口左边缘并保持原播放状态。 */
-    private fun correctPlaybackAfterViewportDrag(positionMs: Long) {
-        val correctedPositionMs = positionMs.coerceIn(0L, audioDuration)
-        val wasPlaying = mediaPlayer?.isPlaying == true
-        mediaPlayer?.seekTo(correctedPositionMs.toInt())
-        isPlaying = wasPlaying
-        updatePlayerUiAtKnownPosition(correctedPositionMs)
-        if (wasPlaying) {
-            startProgressUpdate()
-        } else {
-            stopProgressUpdate()
-        }
-    }
-
-    private fun startLimitedRangePlayback(subtitleIndex: Int) {
-        val target = subtitleEntries.getOrNull(subtitleIndex) ?: return
-        val player = mediaPlayer ?: return
-        limitedPlaybackEntry = target
-        isLimitedRangePlaybackActive = true
-        player.seekTo(target.startTime.toInt())
-        if (!player.isPlaying) player.start()
-        isPlaying = true
-        updatePlayerUiAtKnownPosition(target.startTime)
-        startProgressUpdate()
-    }
-
-    /** 刷新到已知的 seek 目标，避免异步 seek 完成前读取并显示旧位置。 */
-    private fun updatePlayerUiAtKnownPosition(positionMs: Long) {
-        val clampedPositionMs = positionMs.coerceIn(0L, audioDuration)
-        audioCurrentPosition = clampedPositionMs
-        highlightSubtitleAtTime(clampedPositionMs)
-        val previousUserSeeking = isUserSeeking
-        isUserSeeking = true
-        updatePlayerUI()
-        isUserSeeking = previousUserSeeking
-        binding.seekBar.progress = if (audioDuration > 0L) {
-            (clampedPositionMs * 1000L / audioDuration).toInt().coerceIn(0, 1000)
-        } else {
-            0
-        }
-    }
-
-    /**
-     * 高亮显示指定时间的字幕
-     * 注意：只高亮显示，不自动滚动，以免干扰用户编辑
-     */
-    private fun highlightSubtitleAtTime(timeMs: Long) {
-        if (isSourceViewMode) return
-        
-        // 查找包含当前时间的字幕
-        // endTime 用严格小于，确保边界时间点归属于后一行而非前一行
-        for ((index, entry) in subtitleEntries.withIndex()) {
-            if (timeMs >= entry.startTime && timeMs < entry.endTime) {
-                subtitleAdapter.highlightCurrentPlaying(index)
-                return
-            }
-        }
-        // 当前时间不在任何字幕区间内，清除高亮
-        subtitleAdapter.clearPlayingHighlight()
-    }
-    
-    private fun updatePlayerUI() {
-        mediaPlayer?.let { player ->
-            if (!isUserSeeking) {
-                val pos = player.currentPosition.toLong()
-                // 单调递增过滤：只接受向前推进的值（200ms 容差允许 seek 后的回退）
-                if (pos >= audioCurrentPosition || audioCurrentPosition - pos > 200) {
-                    audioCurrentPosition = pos
-                }
-            }
-            audioDuration = player.duration.toLong().takeIf { it > 0 } ?: audioDuration
-            isPlaying = player.isPlaying
-        }
-
-        binding.btnPlayPause.setImageResource(
-            if (isPlaying) android.R.drawable.ic_media_pause
-            else android.R.drawable.ic_media_play
-        )
-
-        binding.tvCurrentTime.text = TimeUtils.formatForDisplay(audioCurrentPosition)
-        binding.tvTotalTime.text   = TimeUtils.formatForDisplay(audioDuration)
-
-        if (!isUserSeeking) {
-            val progress = if (audioDuration > 0)
-                (audioCurrentPosition * 1000 / audioDuration).toInt().coerceIn(0, 1000)
-            else 0
-            binding.seekBar.progress = progress
-        }
-
-        val wavePosition = if (audioDuration > 0) audioCurrentPosition.toFloat() / audioDuration else 0f
-        binding.waveformTimelineView.setCurrentPosition(wavePosition)
-    }
-    
     // ==================== 字幕时间控制按钮方法 ====================
     
     /**
@@ -3214,7 +2903,7 @@ class EditorActivity : AppCompatActivity() {
     private fun jumpToSubtitleTime(entry: SubtitleEntry) {
         if (!ensureAudioMode()) return
         
-        seekTo(entry.startTime)
+        playbackController.seekTo(entry.startTime)
         showShortToast("已跳转到 ${TimeUtils.formatForDisplay(entry.startTime)}")
     }
     
@@ -3226,7 +2915,7 @@ class EditorActivity : AppCompatActivity() {
     private fun setSubtitleTimeToCurrentPosition(entry: SubtitleEntry, position: Int) {
         if (!ensureAudioMode()) return
         
-        val newStartTime = audioCurrentPosition
+        val newStartTime = playbackController.currentPositionMs
         entry.startTime = newStartTime
         
         notifyEntriesChanged(listOf(position))
@@ -3238,74 +2927,5 @@ class EditorActivity : AppCompatActivity() {
         }
     }
     
-    /**
-     * 弹出速率输入对话框
-     */
-    private fun showSpeedInputDialog() {
-        val input = EditText(this).apply {
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-                        android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
-            setText(formatPlaybackSpeedValue(playbackSpeed))
-            hint = "例如：0.5、1.0、1.5、2.0"
-            selectAll()
-            setPadding(48, 32, 48, 16)
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("设置播放速率")
-            .setMessage("请输入倍数（0.25 ~ 4.0）")
-            .setView(input)
-            .setPositiveButton("确定") { _, _ ->
-                val text = input.text?.toString()?.trim() ?: ""
-                val speed = text.toFloatOrNull()
-                when {
-                    speed == null ->
-                        com.subtitleedit.util.OverwritingToast.makeText(this, "请输入有效数字", Toast.LENGTH_SHORT).show()
-                    speed < 0.25f || speed > 4.0f ->
-                        com.subtitleedit.util.OverwritingToast.makeText(this, "速率范围：0.25 ~ 4.0", Toast.LENGTH_SHORT).show()
-                    else ->
-                        applyPlaybackSpeed(speed)
-                }
-            }
-            .setNegativeButton("取消", null)
-            .show()
-
-        // 自动弹出软键盘
-        input.postDelayed({
-            val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
-                as android.view.inputmethod.InputMethodManager
-            imm.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
-        }, 100)
-    }
-
-    /**
-     * 应用播放速率到 MediaPlayer，并刷新按钮文字
-     */
-    private fun applyPlaybackSpeed(speed: Float) {
-        playbackSpeed = speed
-
-        // 格式化按钮文字：整数倍省略小数（1× / 1.5×）
-        val label = if (speed == speed.toLong().toFloat()) {
-            "${speed.toLong()}×"
-        } else {
-            // 最多保留两位有效小数，去掉末尾 0
-            formatPlaybackSpeedValue(speed) + "×"
-        }
-        binding.tvPlaybackSpeed.text = label
-
-        mediaPlayer?.let { player ->
-            try {
-                val params = android.media.PlaybackParams().setSpeed(speed)
-                player.playbackParams = params
-            } catch (e: Exception) {
-                com.subtitleedit.util.OverwritingToast.makeText(this, "设置速率失败：${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        com.subtitleedit.util.OverwritingToast.makeText(this, "播放速率已设置为 ${label}", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun formatPlaybackSpeedValue(speed: Float): String =
-        String.format(Locale.US, "%.2f", speed).trimEnd('0').trimEnd('.')
 }
 
