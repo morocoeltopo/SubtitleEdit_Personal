@@ -400,7 +400,6 @@ class EditorActivity : AppCompatActivity() {
             context = this,
             binding = binding,
             isAudioFile = isAudioFile,
-            audioFileName = { currentFile?.name },
             subtitles = { subtitleEntries },
             isSourceViewMode = { isSourceViewMode },
             onPlayingSubtitleChanged = { index ->

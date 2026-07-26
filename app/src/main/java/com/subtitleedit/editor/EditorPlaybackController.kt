@@ -32,7 +32,6 @@ internal class EditorPlaybackController(
     private val context: Context,
     private val binding: ActivityEditorBinding,
     private val isAudioFile: Boolean,
-    private val audioFileName: () -> String?,
     private val subtitles: () -> List<SubtitleEntry>,
     private val isSourceViewMode: () -> Boolean,
     private val onPlayingSubtitleChanged: (Int?) -> Unit,
@@ -126,7 +125,6 @@ internal class EditorPlaybackController(
         }
         playbackPhase = PlaybackPhase.IDLE
 
-        audioFileName()?.let { binding.tvAudioFileName.text = it }
         bindTimelinePlaybackCallbacks()
         bindPlayerControls()
         renderPlayPauseIcon()
