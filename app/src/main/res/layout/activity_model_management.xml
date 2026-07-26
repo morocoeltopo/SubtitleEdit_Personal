@@ -59,7 +59,7 @@
                 android:layout_gravity="center"
                 android:gravity="center"
                 android:padding="24dp"
-                android:text="未发现模型"
+                android:text="@string/activity_model_management_text_01"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="16sp"
                 android:visibility="gone" />

@@ -50,7 +50,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="语音转字幕高级配置"
+                        android:text="@string/activity_model_settings_text_01"
                         android:textColor="@color/on_surface"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -59,7 +59,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="配置固定分段等通用识别选项"
+                        android:text="@string/activity_model_settings_text_02"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="13sp" />
 
@@ -69,7 +69,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="打开配置" />
+                        android:text="@string/activity_model_settings_text_03" />
 
                 </LinearLayout>
 
@@ -105,7 +105,7 @@
                                 android:id="@+id/tvAsrModelTitle"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="Whisper 模型"
+                                android:text="@string/activity_model_settings_text_04"
                                 android:textSize="16sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/on_surface" />
@@ -115,7 +115,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="12dp"
-                                android:text="Encoder 模型"
+                                android:text="@string/activity_model_settings_text_05"
                                 android:textSize="14sp"
                                 android:textColor="@color/on_surface" />
 
@@ -132,7 +132,7 @@
                                     android:layout_marginTop="4dp"
                                     android:ellipsize="middle"
                                     android:singleLine="true"
-                                    android:text="未选择"
+                                    android:text="@string/activity_auto_timestamp_text_04"
                                     android:textColor="@color/on_surface_variant"
                                     android:textSize="12sp" />
 
@@ -153,7 +153,7 @@
                                         android:paddingStart="12dp"
                                         android:paddingEnd="12dp"
                                         android:singleLine="true"
-                                        android:text="选择 Encoder" />
+                                        android:text="@string/activity_model_settings_text_06" />
 
                                     <com.google.android.material.button.MaterialButton
                                         android:id="@+id/btnDownloadAsrModel"
@@ -162,13 +162,12 @@
                                         android:layout_height="28dp"
                                         android:layout_marginStart="8dp"
                                         android:backgroundTint="@color/primary"
-                                        android:contentDescription="一键下载并导入模型"
+                                        android:contentDescription="@string/activity_model_settings_contentdescription_01"
                                         android:insetTop="0dp"
                                         android:insetBottom="0dp"
                                         android:minWidth="0dp"
                                         android:minHeight="0dp"
                                         android:padding="5dp"
-                                        android:text=""
                                         android:visibility="gone"
                                         app:cornerRadius="14dp"
                                         app:icon="@drawable/ic_download"
@@ -190,7 +189,7 @@
                                         android:paddingStart="6dp"
                                         android:paddingEnd="6dp"
                                         android:singleLine="true"
-                                        android:text="重置"
+                                        android:text="@string/activity_model_settings_text_07"
                                         android:textColor="@color/primary"
                                         android:textSize="14sp"
                                         android:visibility="gone" />
@@ -217,7 +216,7 @@
                                 android:minWidth="0dp"
                                 android:paddingTop="0dp"
                                 android:paddingBottom="0dp"
-                                android:text="配置" />
+                                android:text="@string/activity_model_settings_text_08" />
 
                             <Button
                                 android:id="@+id/btnSwitchAsrModel"
@@ -227,7 +226,7 @@
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minHeight="0dp"
-                                android:text="切换模型" />
+                                android:text="@string/activity_model_settings_text_09" />
 
                         </LinearLayout>
                     </LinearLayout>
@@ -243,7 +242,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="Decoder 模型"
+                        android:text="@string/activity_model_settings_text_10"
                         android:textSize="14sp"
                         android:textColor="@color/on_surface" />
 
@@ -252,7 +251,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="未选择"
+                        android:text="@string/activity_auto_timestamp_text_04"
                         android:textSize="12sp"
                         android:textColor="@color/on_surface_variant"
                         android:ellipsize="middle"
@@ -263,7 +262,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="选择 Decoder"
+                        android:text="@string/activity_model_settings_text_11"
                         style="@style/Widget.Material3.Button.OutlinedButton" />
 
                     </LinearLayout>
@@ -273,7 +272,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="Tokens 文件"
+                        android:text="@string/activity_model_settings_text_12"
                         android:textSize="14sp"
                         android:textColor="@color/on_surface" />
 
@@ -282,7 +281,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="未选择"
+                        android:text="@string/activity_auto_timestamp_text_04"
                         android:textSize="12sp"
                         android:textColor="@color/on_surface_variant"
                         android:ellipsize="middle"
@@ -293,7 +292,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="选择 Tokens"
+                        android:text="@string/activity_model_settings_text_13"
                         style="@style/Widget.Material3.Button.OutlinedButton" />
 
                     <TextView
@@ -304,7 +303,7 @@
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="end"
-                        android:text="帮助"
+                        android:text="@string/tts_help"
                         android:textColor="@color/primary"
                         android:textSize="12sp" />
 
@@ -329,7 +328,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="VAD 模型（可选，已内置）"
+                        android:text="@string/activity_model_settings_text_14"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="@color/on_surface" />
@@ -339,7 +338,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="使用内置模型"
+                        android:text="@string/activity_model_settings_text_15"
                         android:textSize="12sp"
                         android:textColor="@color/on_surface_variant"
                         android:ellipsize="middle"
@@ -357,14 +356,14 @@
                             style="@style/Widget.Material3.Button.OutlinedButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="选择外部 VAD 模型" />
+                            android:text="@string/activity_model_settings_text_16" />
 
                         <com.google.android.material.checkbox.MaterialCheckBox
                             android:id="@+id/cbUseBuiltInVad"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="12dp"
-                            android:text="使用内置"
+                            android:text="@string/activity_model_settings_text_17"
                             android:textColor="@color/on_surface"
                             android:textSize="14sp" />
 
@@ -391,7 +390,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="VAD 参数设置"
+                        android:text="@string/activity_model_settings_text_18"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="@color/on_surface" />
@@ -401,7 +400,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="检测阈值"
+                        android:text="@string/activity_model_settings_text_19"
                         android:textSize="14sp"
                         android:textColor="@color/on_surface" />
 
@@ -409,7 +408,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="值越低越容易检测到语音，但可能误判噪音"
+                        android:text="@string/activity_model_settings_text_20"
                         android:textSize="12sp"
                         android:textColor="@color/on_surface_variant" />
 
@@ -439,7 +438,7 @@
                                 android:id="@+id/etVadThreshold"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="0.30"
+                                android:text="@string/activity_model_settings_text_21"
                                 android:textSize="14sp"
                                 android:gravity="center"
                                 android:inputType="numberDecimal"
@@ -454,7 +453,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="最小静音时长"
+                        android:text="@string/activity_model_settings_text_22"
                         android:textSize="14sp"
                         android:textColor="@color/on_surface" />
 
@@ -462,7 +461,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="静音超过此时长才会分段"
+                        android:text="@string/activity_model_settings_text_23"
                         android:textSize="12sp"
                         android:textColor="@color/on_surface_variant" />
 
@@ -493,7 +492,7 @@
                                 android:id="@+id/etMinSilence"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="0.30"
+                                android:text="@string/activity_model_settings_text_21"
                                 android:textSize="14sp"
                                 android:gravity="center"
                                 android:inputType="numberDecimal"
@@ -508,7 +507,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="最小语音时长"
+                        android:text="@string/activity_model_settings_text_24"
                         android:textSize="14sp"
                         android:textColor="@color/on_surface" />
 
@@ -516,7 +515,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="短于此时长的语音会被忽略"
+                        android:text="@string/activity_model_settings_text_25"
                         android:textSize="12sp"
                         android:textColor="@color/on_surface_variant" />
 
@@ -547,7 +546,7 @@
                                 android:id="@+id/etMinSpeech"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="0.25"
+                                android:text="@string/activity_model_settings_text_26"
                                 android:textSize="14sp"
                                 android:inputType="numberDecimal"
                                 android:gravity="center"
@@ -562,7 +561,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="最大语音时长"
+                        android:text="@string/activity_model_settings_text_27"
                         android:textSize="14sp"
                         android:textColor="@color/on_surface" />
 
@@ -570,7 +569,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="超过此时长会强制分段"
+                        android:text="@string/activity_model_settings_text_28"
                         android:textSize="12sp"
                         android:textColor="@color/on_surface_variant" />
 
@@ -601,7 +600,7 @@
                                 android:id="@+id/etMaxSpeech"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="10.0"
+                                android:text="@string/activity_model_settings_text_29"
                                 android:textSize="14sp"
                                 android:inputType="numberDecimal"
                                 android:gravity="center"

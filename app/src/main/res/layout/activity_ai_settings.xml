@@ -47,7 +47,7 @@
                         android:id="@+id/tvProviderTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="AI 翻译设置"
+                        android:text="@string/activity_ai_settings_text_01"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="@color/on_surface"
@@ -56,7 +56,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="平台"
+                        android:text="@string/activity_ai_settings_text_02"
                         android:textSize="14sp"
                         android:textColor="@color/on_surface_variant"
                         android:layout_marginBottom="4dp" />
@@ -71,7 +71,7 @@
                         android:id="@+id/tilApiKey"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="API Key"
+                        android:hint="@string/activity_ai_settings_hint_01"
                         android:layout_marginBottom="16dp"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
@@ -87,7 +87,7 @@
                         android:id="@+id/tilModel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="模型名称"
+                        android:hint="@string/activity_ai_settings_hint_02"
                         android:layout_marginBottom="16dp"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
@@ -102,7 +102,7 @@
                         android:id="@+id/tvModelLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="模型"
+                        android:text="@string/activity_ai_settings_text_03"
                         android:textSize="14sp"
                         android:textColor="@color/on_surface_variant"
                         android:layout_marginBottom="4dp"
@@ -127,7 +127,7 @@
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="源语言（留空自动检测）"
+                        android:hint="@string/activity_ai_settings_hint_03"
                         android:layout_marginBottom="16dp"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
@@ -141,7 +141,7 @@
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="目标语言"
+                        android:hint="@string/activity_ai_settings_hint_04"
                         android:layout_marginBottom="16dp"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
@@ -155,7 +155,7 @@
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="AI 提示词（可选）"
+                        android:hint="@string/activity_ai_settings_hint_05"
                         app:helperText="用于补充术语、语气或翻译规则；固定输出格式仍由应用控制"
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 

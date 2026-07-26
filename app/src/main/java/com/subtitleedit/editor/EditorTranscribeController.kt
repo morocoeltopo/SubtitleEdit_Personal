@@ -13,6 +13,7 @@ import com.subtitleedit.model.SubtitleEntry
 import com.subtitleedit.util.SettingsManager
 import com.subtitleedit.util.WhisperRecognizer
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -186,6 +187,9 @@ internal class EditorTranscribeController(
                 progressDialog.dismiss()
                 result.onSuccess { texts -> showTranscriptionResult(selectedEntries, texts) }
                     .onFailure { showMessage("转录失败：${it.message ?: "未知错误"}") }
+            } catch (e: CancellationException) {
+                // 协程被取消（例如 Activity 销毁）不是转录失败，不要弹提示
+                throw e
             } catch (e: Exception) {
                 if (!transcribeCancelled) showMessage("转录失败：${e.message ?: "未知错误"}")
             } finally {

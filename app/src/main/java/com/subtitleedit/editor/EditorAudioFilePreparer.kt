@@ -4,6 +4,7 @@ import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFprobeKit
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -29,6 +30,8 @@ internal class EditorAudioFilePreparer(
             Log.w(TAG, "音频 start time 不为 0：$startTime，开始转换为 WAV")
             val wavFile = try {
                 File.createTempFile("audio_fixed_", ".wav", cacheDir)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "创建临时 WAV 文件失败，使用原文件", e)
                 return@withContext audioFile
@@ -50,6 +53,11 @@ internal class EditorAudioFilePreparer(
                     }
                     audioFile
                 }
+            } catch (e: CancellationException) {
+                if (wavFile.exists() && !wavFile.delete()) {
+                    tempFixedWavFile = wavFile
+                }
+                throw e
             } catch (e: Exception) {
                 if (wavFile.exists() && !wavFile.delete()) {
                     tempFixedWavFile = wavFile

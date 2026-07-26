@@ -45,7 +45,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="转换设置"
+                    android:text="@string/activity_batch_convert_text_01"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface" />
@@ -80,7 +80,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:text="选择输出目录" />
+                    android:text="@string/activity_batch_convert_text_02" />
 
                 <TextView
                     android:id="@+id/tvOutputDir"
@@ -89,7 +89,7 @@
                     android:layout_marginTop="4dp"
                     android:textColor="@color/on_surface"
                     android:textSize="12sp"
-                    android:text="输出目录：Download/SubtitleEdit/Convert（默认）" />
+                    android:text="@string/activity_batch_convert_text_03" />
 
             </LinearLayout>
 
@@ -120,7 +120,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="待转换文件"
+                        android:text="@string/activity_batch_convert_text_04"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="@color/on_surface" />
@@ -129,7 +129,7 @@
                         android:id="@+id/btnAddFiles"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="添加文件"
+                        android:text="@string/activity_batch_convert_text_05"
                         style="@style/Widget.Material3.Button.TextButton" />
 
                 </LinearLayout>

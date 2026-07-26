@@ -1,5 +1,6 @@
 package com.subtitleedit.util
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -64,7 +65,7 @@ class AiTranslator(
             }
 
             if (isCancelled()) {
-                return@withContext Result.failure(CancellationException("翻译已取消"))
+                throw CancellationException("翻译已取消")
             }
 
             val translatedTexts = mutableListOf<String>()
@@ -78,6 +79,8 @@ class AiTranslator(
             }
 
             Result.success(translatedTexts)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -335,9 +338,4 @@ $additionalInstructions
             }
         }
     }
-
-    /**
-     * 取消标记
-     */
-    class CancellationException(message: String) : Exception(message)
 }

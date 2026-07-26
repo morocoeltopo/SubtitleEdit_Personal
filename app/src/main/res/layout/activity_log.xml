@@ -25,7 +25,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="com.subtitleedit 最近 24 小时"
+            android:text="@string/activity_log_text_01"
             android:textColor="@color/on_surface_variant"
             android:textSize="13sp" />
 
@@ -34,7 +34,7 @@
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="刷新" />
+            android:text="@string/activity_log_text_02" />
 
         <Button
             android:id="@+id/btnExport"
@@ -42,7 +42,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:text="导出" />
+            android:text="@string/activity_log_text_03" />
 
     </LinearLayout>
 
@@ -61,14 +61,14 @@
             android:layout_width="wrap_content"
             android:layout_height="40dp"
             android:checked="true"
-            android:text="简单" />
+            android:text="@string/activity_log_text_04" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnDetailedLog"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="40dp"
-            android:text="详细" />
+            android:text="@string/activity_log_text_05" />
 
     </com.google.android.material.button.MaterialButtonToggleGroup>
 

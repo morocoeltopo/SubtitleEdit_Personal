@@ -13,7 +13,7 @@
         android:id="@+id/checkApplyFormat"
         android:layout_width="40dp"
         android:layout_height="40dp"
-        android:contentDescription="格式化此行" />
+        android:contentDescription="@string/item_subtitle_format_preview_contentdescription_01" />
 
     <TextView
         android:id="@+id/tvFormatIndex"

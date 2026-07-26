@@ -75,4 +75,231 @@
     <string name="tts_system_settings">打开系统 TTS 设置</string>
     <string name="tts_help">帮助</string>
     <string name="tts_help_message">推荐使用Google TTS引擎，在谷歌商店搜索Google语音识别和语音合成并下载安装，然后在设置里下载对应的语音包，随后更改朗读引擎即可</string>
+
+    <!-- Layout and menu text -->
+    <string name="activity_ai_settings_text_01">AI 翻译设置</string>
+    <string name="activity_ai_settings_text_02">平台</string>
+    <string name="activity_ai_settings_hint_01" translatable="false">API Key</string>
+    <string name="activity_ai_settings_hint_02">模型名称</string>
+    <string name="activity_ai_settings_text_03">模型</string>
+    <string name="activity_ai_settings_hint_03">源语言（留空自动检测）</string>
+    <string name="activity_ai_settings_hint_04">目标语言</string>
+    <string name="activity_ai_settings_hint_05">AI 提示词（可选）</string>
+    <string name="activity_auto_timestamp_text_01">使用 VAD（语音活动检测）自动检测音频中的语音段，生成带时间轴的字幕模板。生成的字幕内容为请输入文本，您可以在字幕编辑器中填写实际内容。</string>
+    <string name="activity_auto_timestamp_text_02">音频/视频文件（可多选）</string>
+    <string name="activity_auto_timestamp_text_03">选择文件（可多选）</string>
+    <string name="activity_auto_timestamp_text_04">未选择</string>
+    <string name="activity_auto_timestamp_text_05">输出格式</string>
+    <string name="activity_auto_timestamp_text_06">输出目录</string>
+    <string name="activity_auto_timestamp_text_07" translatable="false">Download/SubtitleEdit/Convert</string>
+    <string name="activity_auto_timestamp_text_08">选择目录</string>
+    <string name="activity_auto_timestamp_text_09">生成时间轴</string>
+    <string name="activity_auto_timestamp_text_10">运行日志与预览</string>
+    <string name="activity_auto_timestamp_text_11">等待生成...</string>
+    <string name="activity_batch_convert_text_01">转换设置</string>
+    <string name="activity_batch_convert_text_02">选择输出目录</string>
+    <string name="activity_batch_convert_text_03">输出目录：Download/SubtitleEdit/Convert（默认）</string>
+    <string name="activity_batch_convert_text_04">待转换文件</string>
+    <string name="activity_batch_convert_text_05">添加文件</string>
+    <string name="activity_editor_hint_01">替换为</string>
+    <string name="activity_editor_text_01">替换</string>
+    <string name="activity_editor_text_02">全部替换</string>
+    <string name="activity_editor_contentdescription_01">音频文件</string>
+    <string name="activity_editor_text_03" translatable="false">▼</string>
+    <string name="activity_editor_contentdescription_02">展开/折叠波形图</string>
+    <string name="activity_editor_contentdescription_03">插入字幕（打轴）</string>
+    <string name="activity_editor_contentdescription_04">快速转录选中的字幕</string>
+    <string name="activity_editor_text_04">波形</string>
+    <string name="activity_editor_contentdescription_05">切换波形/频谱</string>
+    <string name="activity_editor_text_05" translatable="false">−</string>
+    <string name="activity_editor_contentdescription_06">缩小振幅</string>
+    <string name="activity_editor_text_06" translatable="false">+</string>
+    <string name="activity_editor_contentdescription_07">放大振幅（长按重置）</string>
+    <string name="activity_editor_text_07">生成波形图</string>
+    <string name="activity_editor_contentdescription_08">播放/暂停</string>
+    <string name="activity_editor_text_08" translatable="false">1.0×</string>
+    <string name="activity_editor_contentdescription_09">播放速度</string>
+    <string name="activity_log_text_01">com.subtitleedit 最近 24 小时</string>
+    <string name="activity_log_text_02">刷新</string>
+    <string name="activity_log_text_03">导出</string>
+    <string name="activity_log_text_04">简单</string>
+    <string name="activity_log_text_05">详细</string>
+    <string name="activity_main_contentdescription_01">复制</string>
+    <string name="activity_main_contentdescription_02">移动</string>
+    <string name="activity_main_contentdescription_03">重命名</string>
+    <string name="activity_main_contentdescription_04">更多操作</string>
+    <string name="activity_main_text_01">更多</string>
+    <string name="activity_main_text_02">当前目录</string>
+    <string name="activity_main_text_03">复制到此处</string>
+    <string name="activity_main_text_04">上一级</string>
+    <string name="activity_media_convert_text_01">源文件</string>
+    <string name="activity_media_convert_text_02">选择音视频文件</string>
+    <string name="activity_media_convert_text_03">未选择文件</string>
+    <string name="activity_media_convert_text_04">输出目录：Download/SubtitleEdit/Convert</string>
+    <string name="activity_media_convert_text_05">视频格式</string>
+    <string name="activity_media_convert_text_06">音频格式（视频转音频 / 纯音频）</string>
+    <string name="activity_media_convert_text_07">▶ 高级选项</string>
+    <string name="activity_media_convert_text_08">视频编码器</string>
+    <string name="activity_media_convert_text_09">分辨率</string>
+    <string name="activity_media_convert_text_10">视频码率</string>
+    <string name="activity_media_convert_hint_01">空=自动 (单位: kbps)</string>
+    <string name="activity_media_convert_text_11">视频质量</string>
+    <string name="activity_media_convert_hint_02">自定义 CRF 值 (0-51，越小越好)</string>
+    <string name="activity_media_convert_text_12">音频编码器</string>
+    <string name="activity_media_convert_text_13">音频码率</string>
+    <string name="activity_media_convert_text_14">采样率</string>
+    <string name="activity_media_convert_text_15">声道</string>
+    <string name="activity_media_convert_text_16">分享结果</string>
+    <string name="activity_model_management_text_01">未发现模型</string>
+    <string name="activity_model_settings_text_01">语音转字幕高级配置</string>
+    <string name="activity_model_settings_text_02">配置固定分段等通用识别选项</string>
+    <string name="activity_model_settings_text_03">打开配置</string>
+    <string name="activity_model_settings_text_04">Whisper 模型</string>
+    <string name="activity_model_settings_text_05">Encoder 模型</string>
+    <string name="activity_model_settings_text_06">选择 Encoder</string>
+    <string name="activity_model_settings_contentdescription_01">一键下载并导入模型</string>
+    <string name="activity_model_settings_text_07">重置</string>
+    <string name="activity_model_settings_text_08">配置</string>
+    <string name="activity_model_settings_text_09">切换模型</string>
+    <string name="activity_model_settings_text_10">Decoder 模型</string>
+    <string name="activity_model_settings_text_11">选择 Decoder</string>
+    <string name="activity_model_settings_text_12">Tokens 文件</string>
+    <string name="activity_model_settings_text_13">选择 Tokens</string>
+    <string name="activity_model_settings_text_14">VAD 模型（可选，已内置）</string>
+    <string name="activity_model_settings_text_15">使用内置模型</string>
+    <string name="activity_model_settings_text_16">选择外部 VAD 模型</string>
+    <string name="activity_model_settings_text_17">使用内置</string>
+    <string name="activity_model_settings_text_18">VAD 参数设置</string>
+    <string name="activity_model_settings_text_19">检测阈值</string>
+    <string name="activity_model_settings_text_20">值越低越容易检测到语音，但可能误判噪音</string>
+    <string name="activity_model_settings_text_21" translatable="false">0.30</string>
+    <string name="activity_model_settings_text_22">最小静音时长</string>
+    <string name="activity_model_settings_text_23">静音超过此时长才会分段</string>
+    <string name="activity_model_settings_text_24">最小语音时长</string>
+    <string name="activity_model_settings_text_25">短于此时长的语音会被忽略</string>
+    <string name="activity_model_settings_text_26" translatable="false">0.25</string>
+    <string name="activity_model_settings_text_27">最大语音时长</string>
+    <string name="activity_model_settings_text_28">超过此时长会强制分段</string>
+    <string name="activity_model_settings_text_29" translatable="false">10.0</string>
+    <string name="activity_settings_text_01">默认编码</string>
+    <string name="activity_settings_text_02">主题</string>
+    <string name="activity_settings_text_03">语音转录设置</string>
+    <string name="activity_settings_text_04">模型管理</string>
+    <string name="activity_settings_text_05">清除缓存</string>
+    <string name="activity_settings_text_06">运行日志</string>
+    <string name="activity_settings_text_07">启动时检查更新</string>
+    <string name="activity_settings_text_08">启动应用时自动检查是否有新版本</string>
+    <string name="activity_settings_text_09">播放行为</string>
+    <string name="activity_settings_text_10">限定区间循环播放</string>
+    <string name="activity_settings_text_11">长按波形字幕块限定区间并双击播放时，结束后自动回到开头循环；关闭则播放一次后暂停</string>
+    <string name="activity_settings_text_12">文件管理</string>
+    <string name="activity_settings_text_13">显示所有类型文件</string>
+    <string name="activity_settings_text_14">在文件列表中显示字幕和音频之外的文件</string>
+    <string name="activity_settings_text_15">显示隐藏文件</string>
+    <string name="activity_settings_text_16">显示以“.”开头文件和文件夹</string>
+    <string name="activity_speech_to_subtitle_settings_text_01">识别流程</string>
+    <string name="activity_speech_to_subtitle_settings_text_02">固定分段时长</string>
+    <string name="activity_speech_to_subtitle_settings_text_03">未使用 VAD 分段时生效</string>
+    <string name="activity_speech_to_subtitle_settings_text_04" translatable="false">30</string>
+    <string name="activity_speech_to_subtitle_settings_text_05">Whisper 线程数</string>
+    <string name="activity_speech_to_subtitle_settings_text_06">线程越多速度可能越快，但内存和发热也会增加</string>
+    <string name="activity_speech_to_subtitle_settings_text_07" translatable="false">4</string>
+    <string name="activity_speech_to_subtitle_settings_text_08">启用热词</string>
+    <string name="activity_speech_to_subtitle_settings_text_09">提高特定词汇的识别倾向，仍会输出完整字幕</string>
+    <string name="activity_speech_to_subtitle_settings_hint_01">热词</string>
+    <string name="activity_speech_to_subtitle_settings_text_10">每行一个词或短语</string>
+    <string name="activity_speech_to_subtitle_settings_text_11">保存热词</string>
+    <string name="activity_speech_to_subtitle_settings_text_12">热词权重</string>
+    <string name="activity_speech_to_subtitle_settings_text_13" translatable="false">1.5</string>
+    <string name="activity_speech_to_subtitle_text_01">选择音频/视频文件（可多选）</string>
+    <string name="activity_speech_to_subtitle_text_02">支持 MP3, WAV, FLAC, MP4, MKV 等格式</string>
+    <string name="activity_speech_to_subtitle_text_03">源语言</string>
+    <string name="activity_speech_to_subtitle_text_04">TXT格式不使用VAD分段</string>
+    <string name="activity_speech_to_subtitle_text_05">仅在输出格式为 TXT 时生效</string>
+    <string name="activity_speech_to_subtitle_text_06">正在处理...</string>
+    <string name="activity_speech_to_subtitle_text_07">正在分析音频...</string>
+    <string name="activity_speech_to_subtitle_text_08">运行日志与识别内容：</string>
+    <string name="activity_speech_to_subtitle_text_09">等待识别...</string>
+    <string name="activity_subtitle_format_editor_text_01">清除句内内容</string>
+    <string name="activity_subtitle_format_editor_text_02">空格</string>
+    <string name="activity_subtitle_format_editor_text_03">清除句末标点</string>
+    <string name="activity_subtitle_format_editor_text_04">标点替换</string>
+    <string name="activity_subtitle_format_editor_hint_01">要替换的标点</string>
+    <string name="activity_subtitle_format_editor_text_05">添加句末标点</string>
+    <string name="activity_subtitle_format_editor_text_06">应用</string>
+    <string name="activity_subtitle_format_select_text_01">选择要格式化的字幕文件</string>
+    <string name="activity_subtitle_format_select_text_02">支持 SRT、LRC 和 TXT；格式化完成后可预览并写回原文件。</string>
+    <string name="activity_subtitle_format_select_text_03">选择字幕文件</string>
+    <string name="activity_subtitle_format_select_text_04">尚未选择文件</string>
+    <string name="activity_subtitle_format_select_text_05">确定并编辑</string>
+    <string name="activity_tools_text_01">字幕格式转换</string>
+    <string name="activity_tools_text_02">批量转换字幕格式（SRT/LRC）</string>
+    <string name="activity_tools_contentdescription_01">进入</string>
+    <string name="activity_tools_contentdescription_02">字幕格式化</string>
+    <string name="activity_tools_text_03">格式化工具</string>
+    <string name="activity_tools_text_04">清除标点和字间空格、替换标点</string>
+    <string name="activity_tools_contentdescription_03">人声分离</string>
+    <string name="activity_tools_text_05">使用 HTDemucs ONNX 分离 Vocals、Drums、Bass、Other</string>
+    <string name="activity_tools_contentdescription_04">语音转字幕</string>
+    <string name="activity_tools_text_06">音频/视频转字幕，支持多种语言识别</string>
+    <string name="activity_tools_contentdescription_05">音视频转换</string>
+    <string name="activity_tools_text_07">视频转音频/格式转换 (MP3/AAC/MP4 等)</string>
+    <string name="activity_tools_contentdescription_06">自动打轴</string>
+    <string name="activity_tools_text_08">使用 VAD 自动检测语音段并生成时间轴</string>
+    <string name="activity_vocal_separation_settings_text_01">通用四轨模型</string>
+    <string name="activity_vocal_separation_settings_text_02">未选择通用四轨模型</string>
+    <string name="activity_vocal_separation_settings_text_03">选择通用四轨模型</string>
+    <string name="activity_vocal_separation_settings_contentdescription_01">下载并选择人声分离模型</string>
+    <string name="activity_vocal_separation_settings_text_04">通用模型用于同时输出多个音轨，也可在缺少对应 FT 模型时处理单轨。</string>
+    <string name="activity_vocal_separation_settings_text_05">未选择 Vocals 模型</string>
+    <string name="activity_vocal_separation_settings_text_06">选择 Vocals 模型</string>
+    <string name="activity_vocal_separation_settings_text_07">未选择 Drums 模型</string>
+    <string name="activity_vocal_separation_settings_text_08">选择 Drums 模型</string>
+    <string name="activity_vocal_separation_settings_text_09">未选择 Bass 模型</string>
+    <string name="activity_vocal_separation_settings_text_10">选择 Bass 模型</string>
+    <string name="activity_vocal_separation_settings_text_11">未选择 Other 模型</string>
+    <string name="activity_vocal_separation_settings_text_12">选择 Other 模型</string>
+    <string name="activity_vocal_separation_settings_text_13">手动选择的模型通过文档 URI 直接读取；一键下载的通用模型保存到 Download/SubtitleEdit/models/separation。</string>
+    <string name="activity_vocal_separation_settings_text_14" translatable="false">ONNX Runtime</string>
+    <string name="activity_vocal_separation_settings_text_15">启用 ORT 图优化</string>
+    <string name="activity_vocal_separation_settings_text_16">可能提高推理速度，但 HTDemucs 在模型加载时可能产生很高的内存峰值。</string>
+    <string name="activity_vocal_separation_settings_text_17">启用 CPU arena</string>
+    <string name="activity_vocal_separation_settings_text_18">复用 CPU 内存分配通常有利于速度，但可能在多个分块之间保留较大的内存池。</string>
+    <string name="activity_vocal_separation_settings_text_19">默认均关闭，以降低移动设备运行 HTDemucs 时发生内存不足的风险。修改将在下一次开始人声分离时生效。</string>
+    <string name="activity_vocal_separation_text_01">人声分离设置</string>
+    <string name="activity_vocal_separation_text_02">输出音轨</string>
+    <string name="activity_vocal_separation_text_03" translatable="false">Vocals</string>
+    <string name="activity_vocal_separation_text_04" translatable="false">Drums</string>
+    <string name="activity_vocal_separation_text_05" translatable="false">Bass</string>
+    <string name="activity_vocal_separation_text_06" translatable="false">Other</string>
+    <string name="activity_vocal_separation_text_07" translatable="false">Download/SubtitleEdit/Output</string>
+    <string name="activity_vocal_separation_text_08">开始分离</string>
+    <string name="activity_vocal_separation_text_09">正在准备...</string>
+    <string name="activity_vocal_separation_text_10">提示：单轨优先使用对应 FT 模型，缺失时回退通用模型；选择两个及以上音轨时只使用通用模型并一次输出。取消会在当前分块结束后停止。</string>
+    <string name="dialog_archive_conflict_text_01">覆盖文件？</string>
+    <string name="dialog_archive_conflict_text_02">所有文件</string>
+    <string name="dialog_archive_conflict_text_03">跳过</string>
+    <string name="dialog_archive_conflict_text_04">覆盖</string>
+    <string name="dialog_archive_password_hint_01">密码</string>
+    <string name="dialog_archive_password_contentdescription_01">密码本</string>
+    <string name="dialog_create_archive_hint_01">名称</string>
+    <string name="dialog_create_archive_text_01">格式</string>
+    <string name="dialog_create_archive_text_02">压缩方式</string>
+    <string name="dialog_create_archive_text_03">加密方式</string>
+    <string name="dialog_create_archive_hint_02">密码（可选）</string>
+    <string name="dialog_create_archive_text_04">密码仅适用于 7Z 格式</string>
+    <string name="dialog_create_archive_text_05">分卷</string>
+    <string name="dialog_create_archive_text_06">压缩成功后删除源文件</string>
+    <string name="item_log_section_text_01" translatable="false">▶</string>
+    <string name="item_subtitle_format_preview_contentdescription_01">格式化此行</string>
+    <string name="item_subtitle_text_01" translatable="false">→</string>
+    <string name="item_subtitle_contentdescription_01" translatable="false">selected</string>
+    <string name="item_subtitle_contentdescription_02">跳转到字幕时间</string>
+    <string name="item_subtitle_contentdescription_03">设置字幕时间</string>
+    <string name="item_translation_preview_contentdescription_01">应用此行翻译</string>
+    <string name="menu_drafts_title_01">返回根目录</string>
+    <string name="menu_main_title_01">工具</string>
+    <string name="menu_main_title_02">设置</string>
+    <string name="menu_subtitle_format_editor_title_01">全选/取消全选</string>
+    <string name="menu_subtitle_format_editor_title_02">区间选择</string>
 </resources>

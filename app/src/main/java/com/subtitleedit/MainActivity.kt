@@ -16,6 +16,7 @@ import android.widget.ArrayAdapter
 import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -65,21 +66,26 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var fileAdapter: FileListAdapter
-    
-    private var currentDirectory: File? = null
-    private val directoryHistory = mutableListOf<File>()
+    private val stateModel: MainViewModel by viewModels()
+
+    private var currentDirectory: File?
+        get() = stateModel.currentDirectory
+        set(value) { stateModel.currentDirectory = value }
+    private val directoryHistory get() = stateModel.directoryHistory
     private val visibleFiles = mutableListOf<File>()
-    private val selectedPaths = linkedSetOf<String>()
-    private var pendingFileOperation: FileOperation? = null
-    private var pendingArchiveFile: File? = null
-    private val destinationNavigationHistory = mutableListOf<DestinationNavigationState>()
+    private val selectedPaths get() = stateModel.selectedPaths
+    private var pendingFileOperation: FileOperation?
+        get() = stateModel.pendingFileOperation
+        set(value) { stateModel.pendingFileOperation = value }
+    private var pendingArchiveFile: File?
+        get() = stateModel.pendingArchiveFile
+        set(value) { stateModel.pendingArchiveFile = value }
+    private val destinationNavigationHistory get() = stateModel.destinationNavigationHistory
     private var updateCheckStarted = false
     private var pendingUpdate: UpdateChecker.UpdateInfo? = null
     private var updateDialogShown = false
     private var showAllFileTypes = false
     private var showHiddenFiles = false
-
-    private enum class FileOperation { COPY, MOVE, EXTRACT }
 
     private enum class ArchiveAction { PREVIEW, EXTRACT_CURRENT, TEST }
 
@@ -90,18 +96,13 @@ class MainActivity : AppCompatActivity() {
         val binding: DialogArchiveProgressBinding
     )
 
-    private data class DestinationNavigationState(
-        val directory: File,
-        val directoryHistory: List<File>
-    )
-    
     // 权限请求
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val allGranted = permissions.all { it.value }
         if (allGranted) {
-            loadDirectory(getDefaultDirectory())
+            loadInitialDirectory()
         } else {
             showPermissionDeniedDialog()
         }
@@ -114,7 +115,7 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
             Environment.isExternalStorageManager()
         ) {
-            loadDirectory(getDefaultDirectory())
+            loadInitialDirectory()
         } else {
             showPermissionDeniedDialog()
         }
@@ -261,7 +262,7 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // Android 11+ 需要 MANAGE_EXTERNAL_STORAGE
             if (Environment.isExternalStorageManager()) {
-                loadDirectory(getDefaultDirectory())
+                loadInitialDirectory()
             } else {
                 requestManageStoragePermission()
             }
@@ -270,7 +271,7 @@ class MainActivity : AppCompatActivity() {
             val readPermission = Manifest.permission.READ_EXTERNAL_STORAGE
             if (ContextCompat.checkSelfPermission(this, readPermission) 
                 == PackageManager.PERMISSION_GRANTED) {
-                loadDirectory(getDefaultDirectory())
+                loadInitialDirectory()
             } else {
                 permissionLauncher.launch(
                     arrayOf(
@@ -281,7 +282,7 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             // Android 5.x 不需要运行时权限
-            loadDirectory(getDefaultDirectory())
+            loadInitialDirectory()
         }
     }
     
@@ -311,6 +312,19 @@ class MainActivity : AppCompatActivity() {
     
     private fun getDefaultDirectory(): File {
         return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    }
+
+    private fun loadInitialDirectory() {
+        val restored = currentDirectory?.takeIf { it.exists() && it.canRead() }
+        if (loadDirectory(restored ?: getDefaultDirectory())) return
+        if (restored == null) return
+
+        directoryHistory.clear()
+        selectedPaths.clear()
+        pendingFileOperation = null
+        pendingArchiveFile = null
+        destinationNavigationHistory.clear()
+        loadDirectory(getDefaultDirectory())
     }
     
     private fun loadDirectory(directory: File): Boolean {

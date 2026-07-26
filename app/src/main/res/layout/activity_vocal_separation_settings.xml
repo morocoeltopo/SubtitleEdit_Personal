@@ -52,7 +52,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="通用四轨模型"
+                            android:text="@string/activity_vocal_separation_settings_text_01"
                             android:textColor="@color/on_surface"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -74,7 +74,7 @@
                                 android:insetBottom="0dp"
                                 android:minHeight="0dp"
                                 android:minWidth="0dp"
-                                android:text="切换模型" />
+                                android:text="@string/activity_model_settings_text_09" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnModelHelp"
@@ -85,7 +85,7 @@
                                 android:insetBottom="0dp"
                                 android:minHeight="0dp"
                                 android:minWidth="0dp"
-                                android:text="帮助" />
+                                android:text="@string/tts_help" />
 
                         </LinearLayout>
                     </LinearLayout>
@@ -101,7 +101,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
-                            android:text="未选择通用四轨模型"
+                            android:text="@string/activity_vocal_separation_settings_text_02"
                             android:textColor="@color/on_surface_variant"
                             android:textIsSelectable="true" />
 
@@ -121,7 +121,7 @@
                                 android:paddingStart="12dp"
                                 android:paddingEnd="12dp"
                                 android:singleLine="true"
-                                android:text="选择通用四轨模型" />
+                                android:text="@string/activity_vocal_separation_settings_text_03" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/btnDownloadGeneralModel"
@@ -130,13 +130,12 @@
                                 android:layout_height="28dp"
                                 android:layout_marginStart="8dp"
                                 android:backgroundTint="@color/primary"
-                                android:contentDescription="下载并选择人声分离模型"
+                                android:contentDescription="@string/activity_vocal_separation_settings_contentdescription_01"
                                 android:insetTop="0dp"
                                 android:insetBottom="0dp"
                                 android:minWidth="0dp"
                                 android:minHeight="0dp"
                                 android:padding="5dp"
-                                android:text=""
                                 app:cornerRadius="14dp"
                                 app:icon="@drawable/ic_download"
                                 app:iconGravity="textStart"
@@ -157,7 +156,7 @@
                                 android:paddingStart="6dp"
                                 android:paddingEnd="6dp"
                                 android:singleLine="true"
-                                android:text="重置"
+                                android:text="@string/activity_model_settings_text_07"
                                 android:textColor="@color/primary"
                                 android:textSize="14sp"
                                 android:visibility="gone" />
@@ -168,7 +167,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:text="通用模型用于同时输出多个音轨，也可在缺少对应 FT 模型时处理单轨。"
+                            android:text="@string/activity_vocal_separation_settings_text_04"
                             android:textColor="@color/on_surface_variant"
                             android:textSize="12sp" />
 
@@ -186,7 +185,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="未选择 Vocals 模型"
+                        android:text="@string/activity_vocal_separation_settings_text_05"
                         android:textColor="@color/on_surface_variant"
                         android:textIsSelectable="true" />
 
@@ -195,14 +194,14 @@
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="选择 Vocals 模型" />
+                        android:text="@string/activity_vocal_separation_settings_text_06" />
 
                     <TextView
                         android:id="@+id/tvDrumsModel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="未选择 Drums 模型"
+                        android:text="@string/activity_vocal_separation_settings_text_07"
                         android:textColor="@color/on_surface_variant"
                         android:textIsSelectable="true" />
 
@@ -211,14 +210,14 @@
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="选择 Drums 模型" />
+                        android:text="@string/activity_vocal_separation_settings_text_08" />
 
                     <TextView
                         android:id="@+id/tvBassModel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="未选择 Bass 模型"
+                        android:text="@string/activity_vocal_separation_settings_text_09"
                         android:textColor="@color/on_surface_variant"
                         android:textIsSelectable="true" />
 
@@ -227,14 +226,14 @@
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="选择 Bass 模型" />
+                        android:text="@string/activity_vocal_separation_settings_text_10" />
 
                     <TextView
                         android:id="@+id/tvOtherModel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="未选择 Other 模型"
+                        android:text="@string/activity_vocal_separation_settings_text_11"
                         android:textColor="@color/on_surface_variant"
                         android:textIsSelectable="true" />
 
@@ -243,7 +242,7 @@
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="选择 Other 模型" />
+                        android:text="@string/activity_vocal_separation_settings_text_12" />
 
                     </LinearLayout>
 
@@ -251,7 +250,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="手动选择的模型通过文档 URI 直接读取；一键下载的通用模型保存到 Download/SubtitleEdit/models/separation。"
+                        android:text="@string/activity_vocal_separation_settings_text_13"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 
@@ -274,7 +273,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="ONNX Runtime"
+                        android:text="@string/activity_vocal_separation_settings_text_14"
                         android:textColor="@color/on_surface"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -284,7 +283,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="启用 ORT 图优化"
+                        android:text="@string/activity_vocal_separation_settings_text_15"
                         android:textColor="@color/on_surface"
                         android:textSize="14sp" />
 
@@ -292,7 +291,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="可能提高推理速度，但 HTDemucs 在模型加载时可能产生很高的内存峰值。"
+                        android:text="@string/activity_vocal_separation_settings_text_16"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 
@@ -301,7 +300,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="启用 CPU arena"
+                        android:text="@string/activity_vocal_separation_settings_text_17"
                         android:textColor="@color/on_surface"
                         android:textSize="14sp" />
 
@@ -309,7 +308,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="复用 CPU 内存分配通常有利于速度，但可能在多个分块之间保留较大的内存池。"
+                        android:text="@string/activity_vocal_separation_settings_text_18"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 
@@ -320,7 +319,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="默认均关闭，以降低移动设备运行 HTDemucs 时发生内存不足的风险。修改将在下一次开始人声分离时生效。"
+                android:text="@string/activity_vocal_separation_settings_text_19"
                 android:textColor="@color/on_surface_variant"
                 android:textSize="12sp" />
 

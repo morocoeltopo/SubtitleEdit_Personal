@@ -41,7 +41,7 @@
             android:layout_height="48dp"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="16dp"
-            android:text="语音转录设置" />
+            android:text="@string/activity_settings_text_03" />
 
         <!-- 文件选择区域 -->
         <com.google.android.material.card.MaterialCardView
@@ -60,7 +60,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="选择音频/视频文件（可多选）"
+                    android:text="@string/activity_speech_to_subtitle_text_01"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface" />
@@ -69,7 +69,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="支持 MP3, WAV, FLAC, MP4, MKV 等格式"
+                    android:text="@string/activity_speech_to_subtitle_text_02"
                     android:textSize="14sp"
                     android:textColor="@color/on_surface_variant" />
 
@@ -78,7 +78,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="选择文件（可多选）"
+                    android:text="@string/activity_auto_timestamp_text_03"
                     style="@style/Widget.Material3.Button.OutlinedButton" />
 
                 <TextView
@@ -86,7 +86,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="未选择文件"
+                    android:text="@string/activity_media_convert_text_03"
                     android:textSize="14sp"
                     android:textColor="@color/on_surface_variant" />
 
@@ -112,7 +112,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="源语言"
+                    android:text="@string/activity_speech_to_subtitle_text_03"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface" />
@@ -146,7 +146,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="输出格式"
+                    android:text="@string/activity_auto_timestamp_text_05"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface" />
@@ -163,7 +163,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="TXT格式不使用VAD分段"
+                    android:text="@string/activity_speech_to_subtitle_text_04"
                     android:textColor="@color/on_surface" />
 
                 <TextView
@@ -171,7 +171,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="仅在输出格式为 TXT 时生效"
+                    android:text="@string/activity_speech_to_subtitle_text_05"
                     android:textSize="13sp"
                     android:textColor="@color/on_surface_variant" />
 
@@ -197,7 +197,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="输出目录"
+                    android:text="@string/activity_auto_timestamp_text_06"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface" />
@@ -207,7 +207,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="Download/SubtitleEdit/Convert"
+                    android:text="@string/activity_auto_timestamp_text_07"
                     android:textSize="14sp"
                     android:textColor="@color/on_surface_variant"
                     android:ellipsize="middle"
@@ -218,7 +218,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="选择目录"
+                    android:text="@string/activity_auto_timestamp_text_08"
                     style="@style/Widget.Material3.Button.OutlinedButton" />
 
             </LinearLayout>
@@ -232,7 +232,7 @@
             android:layout_height="56dp"
             android:layout_marginHorizontal="16dp"
             android:layout_marginBottom="16dp"
-            android:text="开始转换"
+            android:text="@string/start_convert"
             android:textSize="16sp"
             android:textStyle="bold" />
 
@@ -249,7 +249,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="正在处理..."
+                android:text="@string/activity_speech_to_subtitle_text_06"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:textColor="@color/on_surface" />
@@ -268,7 +268,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="正在分析音频..."
+                android:text="@string/activity_speech_to_subtitle_text_07"
                 android:textSize="14sp"
                 android:textColor="@color/on_surface_variant" />
 
@@ -277,7 +277,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="运行日志与识别内容："
+                android:text="@string/activity_speech_to_subtitle_text_08"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:textColor="@color/on_surface" />
@@ -295,7 +295,7 @@
                     android:id="@+id/tvRealtimeResult"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="等待识别..."
+                    android:text="@string/activity_speech_to_subtitle_text_09"
                     android:textSize="12sp"
                     android:textColor="@color/on_surface"
                     android:fontFamily="monospace"
@@ -308,7 +308,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="取消"
+                android:text="@string/cancel"
                 style="@style/Widget.Material3.Button.TextButton" />
 
         </LinearLayout>

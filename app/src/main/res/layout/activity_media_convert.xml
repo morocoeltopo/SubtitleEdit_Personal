@@ -45,7 +45,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="源文件"
+                        android:text="@string/activity_media_convert_text_01"
                         android:textStyle="bold"
                         android:textSize="14sp"
                         android:paddingBottom="6dp"/>
@@ -54,13 +54,13 @@
                         android:id="@+id/btnPickFile"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="选择音视频文件"/>
+                        android:text="@string/activity_media_convert_text_02"/>
 
                     <TextView
                         android:id="@+id/tvNoSource"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="未选择文件"
+                        android:text="@string/activity_media_convert_text_03"
                         android:textColor="#9E9E9E"
                         android:textSize="12sp"
                         android:gravity="center"
@@ -105,7 +105,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="输出目录"
+                        android:text="@string/activity_auto_timestamp_text_06"
                         android:textStyle="bold"
                         android:textSize="14sp"
                         android:paddingBottom="6dp"/>
@@ -114,13 +114,13 @@
                         android:id="@+id/btnSelectOutputDir"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="选择输出目录"/>
+                        android:text="@string/activity_batch_convert_text_02"/>
 
                     <TextView
                         android:id="@+id/tvOutputDir"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="输出目录：Download/SubtitleEdit/Convert"
+                        android:text="@string/activity_media_convert_text_04"
                         android:textColor="#9E9E9E"
                         android:textSize="12sp"
                         android:paddingTop="4dp"/>
@@ -146,7 +146,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="输出格式"
+                        android:text="@string/activity_auto_timestamp_text_05"
                         android:textStyle="bold"
                         android:textSize="14sp"
                         android:paddingBottom="6dp"/>
@@ -155,7 +155,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="视频格式"
+                        android:text="@string/activity_media_convert_text_05"
                         android:textSize="12sp"
                         android:textColor="#9E9E9E"
                         android:paddingBottom="4dp"/>
@@ -177,7 +177,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="音频格式（视频转音频 / 纯音频）"
+                        android:text="@string/activity_media_convert_text_06"
                         android:textSize="12sp"
                         android:textColor="#9E9E9E"
                         android:paddingBottom="4dp"/>
@@ -210,7 +210,7 @@
                         style="@style/Widget.Material3.Button.TextButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="▶ 高级选项"
+                        android:text="@string/activity_media_convert_text_07"
                         android:textSize="13sp"
                         android:gravity="start|center_vertical"/>
 
@@ -232,7 +232,7 @@
                             <TextView
                                 android:layout_width="100dp"
                                 android:layout_height="wrap_content"
-                                android:text="视频编码器"
+                                android:text="@string/activity_media_convert_text_08"
                                 android:textSize="13sp"/>
                             <Spinner
                                 android:id="@+id/spinnerVideoCodec"
@@ -252,7 +252,7 @@
                             <TextView
                                 android:layout_width="100dp"
                                 android:layout_height="wrap_content"
-                                android:text="分辨率"
+                                android:text="@string/activity_media_convert_text_09"
                                 android:textSize="13sp"/>
                             <Spinner
                                 android:id="@+id/spinnerResolution"
@@ -271,14 +271,14 @@
                             <TextView
                                 android:layout_width="100dp"
                                 android:layout_height="wrap_content"
-                                android:text="视频码率"
+                                android:text="@string/activity_media_convert_text_10"
                                 android:textSize="13sp"/>
                             <EditText
                                 android:id="@+id/etVideoBitrate"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:hint="空=自动 (单位: kbps)"
+                                android:hint="@string/activity_media_convert_hint_01"
                                 android:inputType="number"
                                 android:importantForAutofill="no"/>
                         </LinearLayout>
@@ -294,7 +294,7 @@
                             <TextView
                                 android:layout_width="100dp"
                                 android:layout_height="wrap_content"
-                                android:text="视频质量"
+                                android:text="@string/activity_media_convert_text_11"
                                 android:textSize="13sp"/>
                             <Spinner
                                 android:id="@+id/spinnerCrf"
@@ -307,7 +307,7 @@
                             android:id="@+id/etCustomCrf"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:hint="自定义 CRF 值 (0-51，越小越好)"
+                            android:hint="@string/activity_media_convert_hint_02"
                             android:inputType="number"
                             android:layout_marginStart="100dp"
                             android:visibility="gone"
@@ -330,7 +330,7 @@
                             <TextView
                                 android:layout_width="100dp"
                                 android:layout_height="wrap_content"
-                                android:text="音频编码器"
+                                android:text="@string/activity_media_convert_text_12"
                                 android:textSize="13sp"/>
                             <Spinner
                                 android:id="@+id/spinnerAudioCodec"
@@ -349,14 +349,14 @@
                             <TextView
                                 android:layout_width="100dp"
                                 android:layout_height="wrap_content"
-                                android:text="音频码率"
+                                android:text="@string/activity_media_convert_text_13"
                                 android:textSize="13sp"/>
                             <EditText
                                 android:id="@+id/etAudioBitrate"
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:hint="空=自动 (单位: kbps)"
+                                android:hint="@string/activity_media_convert_hint_01"
                                 android:inputType="number"
                                 android:importantForAutofill="no"/>
                         </LinearLayout>
@@ -371,7 +371,7 @@
                             <TextView
                                 android:layout_width="100dp"
                                 android:layout_height="wrap_content"
-                                android:text="采样率"
+                                android:text="@string/activity_media_convert_text_14"
                                 android:textSize="13sp"/>
                             <Spinner
                                 android:id="@+id/spinnerSampleRate"
@@ -391,7 +391,7 @@
                             <TextView
                                 android:layout_width="100dp"
                                 android:layout_height="wrap_content"
-                                android:text="声道"
+                                android:text="@string/activity_media_convert_text_15"
                                 android:textSize="13sp"/>
                             <Spinner
                                 android:id="@+id/spinnerChannels"
@@ -438,7 +438,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="开始转换"
+                            android:text="@string/start_convert"
                             android:enabled="false"/>
 
                         <com.google.android.material.button.MaterialButton
@@ -446,7 +446,7 @@
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="取消"
+                            android:text="@string/cancel"
                             android:layout_marginStart="8dp"
                             android:visibility="gone"/>
 
@@ -455,7 +455,7 @@
                             style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="分享结果"
+                            android:text="@string/activity_media_convert_text_16"
                             android:layout_marginStart="8dp"
                             android:visibility="gone"/>
 

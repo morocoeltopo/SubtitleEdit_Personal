@@ -9,6 +9,7 @@ import com.subtitleedit.util.AiProviderConfig
 import com.subtitleedit.util.AiTranslator
 import com.subtitleedit.util.OverwritingToast
 import com.subtitleedit.util.SettingsManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -96,6 +97,7 @@ internal class EditorTranslationController(
             .setNegativeButton("取消") { _, _ ->
                 translateCancelled = true
                 activeAiTranslator?.cancel()
+                translateJob?.cancel(CancellationException("用户取消翻译"))
             }
             .setCancelable(false)
             .create()
@@ -122,6 +124,7 @@ internal class EditorTranslationController(
                 )
 
                 finishTranslation(progressDialog)
+                if (translateCancelled) return@launch
 
                 if (result.isSuccess) {
                     val translatedTexts = result.getOrNull() ?: emptyList()
@@ -130,6 +133,10 @@ internal class EditorTranslationController(
                     val errorMessage = result.exceptionOrNull()?.message ?: "未知错误"
                     showTranslationError(errorMessage)
                 }
+            } catch (e: CancellationException) {
+                // 协程被取消（例如 Activity 销毁）不是翻译失败，收尾但不弹提示
+                finishTranslation(progressDialog)
+                throw e
             } catch (e: Exception) {
                 finishTranslation(progressDialog)
                 showTranslationError(e.message ?: "未知错误")

@@ -105,14 +105,14 @@
                     <ImageView
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:contentDescription="复制"
+                        android:contentDescription="@string/activity_main_contentdescription_01"
                         android:src="@drawable/ic_file_copy" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="复制"
+                        android:text="@string/activity_main_contentdescription_01"
                         android:textColor="@color/on_surface"
                         android:textSize="12sp" />
                 </LinearLayout>
@@ -131,14 +131,14 @@
                     <ImageView
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:contentDescription="移动"
+                        android:contentDescription="@string/activity_main_contentdescription_02"
                         android:src="@drawable/ic_file_move" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="移动"
+                        android:text="@string/activity_main_contentdescription_02"
                         android:textColor="@color/on_surface"
                         android:textSize="12sp" />
                 </LinearLayout>
@@ -157,14 +157,14 @@
                     <ImageView
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:contentDescription="重命名"
+                        android:contentDescription="@string/activity_main_contentdescription_03"
                         android:src="@drawable/ic_rename" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="重命名"
+                        android:text="@string/activity_main_contentdescription_03"
                         android:textColor="@color/on_surface"
                         android:textSize="12sp" />
                 </LinearLayout>
@@ -183,14 +183,14 @@
                     <ImageView
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:contentDescription="删除"
+                        android:contentDescription="@string/delete"
                         android:src="@drawable/ic_delete_normal" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="删除"
+                        android:text="@string/delete"
                         android:textColor="@color/on_surface"
                         android:textSize="12sp" />
                 </LinearLayout>
@@ -209,14 +209,14 @@
                     <ImageView
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:contentDescription="更多操作"
+                        android:contentDescription="@string/activity_main_contentdescription_04"
                         android:src="@drawable/ic_more" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="更多"
+                        android:text="@string/activity_main_text_01"
                         android:textColor="@color/on_surface"
                         android:textSize="12sp" />
                 </LinearLayout>
@@ -237,7 +237,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="当前目录"
+                    android:text="@string/activity_main_text_02"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="13sp" />
 
@@ -246,13 +246,13 @@
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="取消" />
+                    android:text="@string/cancel" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnConfirmDestination"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="复制到此处" />
+                    android:text="@string/activity_main_text_03" />
 
             </LinearLayout>
 
@@ -277,7 +277,7 @@
                 android:layout_weight="1"
                 android:layout_marginEnd="4dp"
                 style="@style/Widget.Material3.Button.OutlinedButton"
-                android:text="上一级" />
+                android:text="@string/activity_main_text_04" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnDrafts"

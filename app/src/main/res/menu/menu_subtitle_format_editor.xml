@@ -4,11 +4,11 @@
     <item
         android:id="@+id/menu_format_select_all"
         android:icon="@drawable/ic_select_all"
-        android:title="全选/取消全选"
+        android:title="@string/menu_subtitle_format_editor_title_01"
         app:showAsAction="always" />
     <item
         android:id="@+id/menu_format_select_range"
         android:icon="@drawable/ic_select_range"
-        android:title="区间选择"
+        android:title="@string/menu_subtitle_format_editor_title_02"
         app:showAsAction="always" />
 </menu>

@@ -71,7 +71,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="清除句内内容"
+                    android:text="@string/activity_subtitle_format_editor_text_01"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -80,7 +80,7 @@
                     android:id="@+id/cbRemoveSpaces"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="空格" />
+                    android:text="@string/activity_subtitle_format_editor_text_02" />
 
                 <GridLayout
                     android:id="@+id/gridInnerPunctuation"
@@ -92,7 +92,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="清除句末标点"
+                    android:text="@string/activity_subtitle_format_editor_text_03"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -107,7 +107,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="标点替换"
+                    android:text="@string/activity_subtitle_format_editor_text_04"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -122,7 +122,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:hint="要替换的标点">
+                    android:hint="@string/activity_subtitle_format_editor_hint_01">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etReplaceFrom"
                         android:layout_width="match_parent"
@@ -136,7 +136,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:hint="替换为">
+                    android:hint="@string/activity_editor_hint_01">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etReplaceTo"
                         android:layout_width="match_parent"
@@ -150,7 +150,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="添加句末标点"
+                    android:text="@string/activity_subtitle_format_editor_text_05"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -166,7 +166,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="18dp"
-                    android:text="应用" />
+                    android:text="@string/activity_subtitle_format_editor_text_06" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSave"
@@ -174,7 +174,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="保存" />
+                    android:text="@string/menu_save" />
             </LinearLayout>
         </ScrollView>
     </LinearLayout>

@@ -11,6 +11,7 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -19,6 +20,7 @@ import android.widget.TextView
 import com.subtitleedit.view.DraggableScrollView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -61,42 +63,77 @@ class EditorActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityEditorBinding
     private lateinit var subtitleAdapter: SubtitleAdapter
-    
-    private var filePath: String = ""
-    private var currentFile: File? = null
+    private val stateModel: EditorViewModel by viewModels()
+
+    private var filePath: String
+        get() = stateModel.filePath
+        set(value) { stateModel.filePath = value }
+    private var currentFile: File?
+        get() = stateModel.currentFile
+        set(value) { stateModel.currentFile = value }
     // 字幕文件路径（当打开音频文件时，用于保存字幕）
-    private var subtitleFilePath: String = ""
-    private var subtitleFile: File? = null
-    private var subtitleEntries = mutableListOf<SubtitleEntry>()
-    private var lastIndexedEntryCount = -1
-    private var currentCharset: Charset = StandardCharsets.UTF_8
-    private var currentFormat: SubtitleParser.SubtitleFormat = SubtitleParser.SubtitleFormat.UNKNOWN
+    private var subtitleFilePath: String
+        get() = stateModel.subtitleFilePath
+        set(value) { stateModel.subtitleFilePath = value }
+    private var subtitleFile: File?
+        get() = stateModel.subtitleFile
+        set(value) { stateModel.subtitleFile = value }
+    private var subtitleEntries: MutableList<SubtitleEntry>
+        get() = stateModel.subtitleEntries
+        set(value) { stateModel.subtitleEntries = value }
+    private var lastIndexedEntryCount: Int
+        get() = stateModel.lastIndexedEntryCount
+        set(value) { stateModel.lastIndexedEntryCount = value }
+    private var currentCharset: Charset
+        get() = stateModel.currentCharset
+        set(value) { stateModel.currentCharset = value }
+    private var currentFormat: SubtitleParser.SubtitleFormat
+        get() = stateModel.currentFormat
+        set(value) { stateModel.currentFormat = value }
     
     // 源视图模式标志
-    private var isSourceViewMode = false
+    private var isSourceViewMode: Boolean
+        get() = stateModel.isSourceViewMode
+        set(value) { stateModel.isSourceViewMode = value }
     // 源视图原始内容（用于 TXT 文件）- 保存原始文件内容，不做任何修改
-    private var originalFileContent = ""
+    private var originalFileContent: String
+        get() = stateModel.originalFileContent
+        set(value) { stateModel.originalFileContent = value }
     // 当前显示的内容（可能是原始内容或从字幕列表生成的内容）
-    private var sourceViewContent = ""
+    private var sourceViewContent: String
+        get() = stateModel.sourceViewContent
+        set(value) { stateModel.sourceViewContent = value }
     
     // 切换视图前保存的滚动位置
-    private var savedScrollPosition = 0
-    private var savedFirstVisibleItemPosition = 0
+    private var savedScrollPosition: Int
+        get() = stateModel.savedScrollPosition
+        set(value) { stateModel.savedScrollPosition = value }
+    private var savedFirstVisibleItemPosition: Int
+        get() = stateModel.savedFirstVisibleItemPosition
+        set(value) { stateModel.savedFirstVisibleItemPosition = value }
     
     // 长按时的位置（用于时间偏移等操作）
     private var longClickPosition: Int = -1
     
     // 是否有未保存的更改
-    private var hasUnsavedChanges = false
+    private var hasUnsavedChanges: Boolean
+        get() = stateModel.hasUnsavedChanges
+        set(value) { stateModel.hasUnsavedChanges = value }
 
     // 是否为新建且从未保存过的文件
-    private var isNewFile = true
+    private var isNewFile: Boolean
+        get() = stateModel.isNewFile
+        set(value) { stateModel.isNewFile = value }
 
     // 当前格式信息（用于 toolbar subtitle 恢复）
-    private var currentFormatInfo = ""
+    private var currentFormatInfo: String
+        get() = stateModel.currentFormatInfo
+        set(value) { stateModel.currentFormatInfo = value }
     
     // 复制/剪贴板数据（支持多行）
-    private var clipboardTexts: List<String> = emptyList()
+    private var clipboardTexts: List<String>
+        get() = stateModel.clipboardTexts
+        set(value) { stateModel.clipboardTexts = value }
     private val cutPasteController = CutPasteController()
     
     // AI 翻译 / 快速转录 / 快速 TTS
@@ -107,7 +144,9 @@ class EditorActivity : AppCompatActivity() {
     private lateinit var searchController: EditorSearchController
     
     // 音频文件相关
-    private var isAudioFile: Boolean = false
+    private var isAudioFile: Boolean
+        get() = stateModel.isAudioFile
+        set(value) { stateModel.isAudioFile = value }
     private lateinit var audioFilePreparer: EditorAudioFilePreparer
     private lateinit var playbackController: EditorPlaybackController
     private lateinit var waveformController: EditorWaveformController
@@ -123,7 +162,12 @@ class EditorActivity : AppCompatActivity() {
     private val saveFileLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
     ) { uri ->
-        uri?.let { saveFileToUri(it) }
+        if (uri == null) {
+            stateModel.saveCoordinator.cancel()
+        } else {
+            val continuation = stateModel.saveCoordinator.complete(saveFileToUri(uri))
+            executeSaveContinuation(continuation)
+        }
     }
     
     // 草稿箱选择器
@@ -153,21 +197,22 @@ class EditorActivity : AppCompatActivity() {
         setContentView(binding.root)
         audioFilePreparer = EditorAudioFilePreparer(cacheDir)
         
-        filePath = intent.getStringExtra(EXTRA_FILE_PATH) ?: ""
-        isAudioFile = intent.getBooleanExtra(EXTRA_IS_AUDIO_FILE, false)
-        subtitleFilePath = intent.getStringExtra(EXTRA_SUBTITLE_FILE_PATH) ?: ""
-        
-        if (filePath.isNotEmpty()) {
-            if (isAudioFile) {
-                // 音频文件模式：currentFile 指向音频文件，subtitleFile 指向字幕文件
-                currentFile = File(filePath)
-                if (subtitleFilePath.isNotEmpty()) {
-                    subtitleFile = File(subtitleFilePath)
+        if (!stateModel.initialized) {
+            filePath = intent.getStringExtra(EXTRA_FILE_PATH) ?: ""
+            isAudioFile = intent.getBooleanExtra(EXTRA_IS_AUDIO_FILE, false)
+            subtitleFilePath = intent.getStringExtra(EXTRA_SUBTITLE_FILE_PATH) ?: ""
+
+            if (filePath.isNotEmpty()) {
+                if (isAudioFile) {
+                    currentFile = File(filePath)
+                    if (subtitleFilePath.isNotEmpty()) {
+                        subtitleFile = File(subtitleFilePath)
+                    }
+                } else {
+                    currentFile = File(filePath)
                 }
-            } else {
-                // 普通模式：currentFile 指向字幕文件
-                currentFile = File(filePath)
             }
+            stateModel.initialized = true
         }
         
         setupToolbar()
@@ -180,7 +225,10 @@ class EditorActivity : AppCompatActivity() {
         setupAudioActions()
         setupBackPressedHandler()
         
-        if (filePath.isNotEmpty()) {
+        if (stateModel.documentLoaded) {
+            restoreDocumentState()
+            if (isAudioFile && filePath.isNotEmpty()) loadAudioFile(subtitleFilePath, restoreDocument = true)
+        } else if (filePath.isNotEmpty()) {
             if (isAudioFile) {
                 loadAudioFile(subtitleFilePath)
             } else {
@@ -376,7 +424,7 @@ class EditorActivity : AppCompatActivity() {
             appCacheDir = cacheDir,
             currentPlaybackPositionMs = { playbackController.currentPositionMs },
             onSubtitlesChanged = { updatedSubtitles ->
-                setSubtitleEntries(updatedSubtitles)
+                replaceSubtitleEntries(updatedSubtitles)
                 submitSubtitleList(refreshAll = true, syncWaveform = false, markChanged = true)
             },
             onSelectedIndexChanged = { index ->
@@ -432,6 +480,40 @@ class EditorActivity : AppCompatActivity() {
             if (count > 0) "取消选择" else "返回"
         invalidateOptionsMenu()
     }
+
+    private fun setDocumentTitle(title: String) {
+        stateModel.documentTitle = title
+        supportActionBar?.title = title
+    }
+
+    private fun restoreDocumentState() {
+        setDocumentTitle(stateModel.documentTitle)
+        if (isSourceViewMode) {
+            binding.rvSubtitles.visibility = View.GONE
+            binding.svSourceView.visibility = View.VISIBLE
+            val wasUnsaved = hasUnsavedChanges
+            binding.etSourceView.setText(sourceViewContent)
+            hasUnsavedChanges = wasUnsaved
+            binding.svSourceView.post { binding.svSourceView.scrollTo(0, savedScrollPosition) }
+        } else {
+            binding.svSourceView.visibility = View.GONE
+            binding.rvSubtitles.visibility = View.VISIBLE
+            submitSubtitleList(
+                refreshAll = true,
+                selectedIndices = stateModel.selectedIndices,
+                updateFormat = false,
+                syncWaveform = false
+            ) {
+                val layoutManager = binding.rvSubtitles.layoutManager as LinearLayoutManager
+                val position = savedFirstVisibleItemPosition
+                if (position in subtitleEntries.indices) {
+                    layoutManager.scrollToPositionWithOffset(position, savedScrollPosition)
+                }
+            }
+        }
+        updateFormatInfo()
+        syncWaveformSubtitles()
+    }
     
     private fun loadFile() {
         if (filePath.isEmpty() || currentFile == null) {
@@ -449,7 +531,7 @@ class EditorActivity : AppCompatActivity() {
             return
         }
 
-        supportActionBar?.title = file.name
+        setDocumentTitle(file.name)
         // 使用用户设置的默认编码
         val settingsManager = SettingsManager.getInstance(this)
         currentCharset = settingsManager.getDefaultEncoding()
@@ -466,7 +548,9 @@ class EditorActivity : AppCompatActivity() {
             currentFile = null
             // 获取文件名并更新显示
             val fileName = getFileNameFromUri(uri)
-            supportActionBar?.title = fileName
+            setDocumentTitle(fileName)
+            stateModel.documentUri = uri.toString()
+            takePersistableWritePermission(uri)
             parseContent(content)
             hasUnsavedChanges = false
             isNewFile = false
@@ -523,7 +607,7 @@ class EditorActivity : AppCompatActivity() {
             sourceViewContent = originalFileContent
             enterSourceViewMode()
         } else {
-            setSubtitleEntries(SubtitleParser.parse(content, currentCharset))
+            replaceSubtitleEntries(SubtitleParser.parse(content, currentCharset))
             exitSourceViewMode()
         }
         
@@ -535,6 +619,7 @@ class EditorActivity : AppCompatActivity() {
         
         // 同步字幕到波形视图（仅音频模式有效）
         syncWaveformSubtitles()
+        stateModel.documentLoaded = true
     }
     
     /**
@@ -653,8 +738,7 @@ class EditorActivity : AppCompatActivity() {
                 .setTitle("有未保存的更改")
                 .setMessage("切换到源视图将重新读取文件，当前列表中未保存的更改不会体现在源视图中。\n\n建议先保存后再切换。")
                 .setPositiveButton("先保存再切换") { _, _ ->
-                    saveFile()
-                    reloadAndEnterSourceView()
+                    saveFile(SaveContinuation.ENTER_SOURCE_VIEW)
                 }
                 .setNeutralButton("直接切换（丢弃更改）") { _, _ ->
                     reloadAndEnterSourceView()
@@ -694,7 +778,7 @@ class EditorActivity : AppCompatActivity() {
     private fun doExitSourceView() {
         val editedContent = binding.etSourceView.text.toString()
         try {
-            setSubtitleEntries(SubtitleParser.parse(editedContent, currentCharset))
+            replaceSubtitleEntries(SubtitleParser.parse(editedContent, currentCharset))
             // 将源视图内容同步回 originalFileContent，使再次切换时内容一致
             originalFileContent = editedContent
             sourceViewContent   = editedContent
@@ -1260,10 +1344,12 @@ class EditorActivity : AppCompatActivity() {
         binding.rvSubtitles.visibility = android.view.View.VISIBLE
         binding.svSourceView.visibility = android.view.View.GONE
         submitSubtitleList(refreshAll = true, clearSelection = true, syncWaveform = true)
-        supportActionBar?.title = "未命名"
+        stateModel.documentUri = null
+        setDocumentTitle("未命名")
         currentFormatInfo = "格式：SRT | 条目数：${subtitleEntries.size}"
         supportActionBar?.subtitle = currentFormatInfo
         hasUnsavedChanges = false
+        stateModel.documentLoaded = true
         com.subtitleedit.util.OverwritingToast.makeText(this, "已新建文件", Toast.LENGTH_SHORT).show()
     }
     
@@ -1278,38 +1364,71 @@ class EditorActivity : AppCompatActivity() {
         openFileLauncher.launch(arrayOf("text/*", "*/*"))
     }
     
-    private fun saveFile() {
-        // 确定要保存的目标文件
+    private fun saveFile(continuation: SaveContinuation = SaveContinuation.NONE) {
+        stateModel.saveCoordinator.begin(continuation)
+        stateModel.documentUri?.let { uriString ->
+            val completed = stateModel.saveCoordinator.complete(saveFileToUri(Uri.parse(uriString)))
+            executeSaveContinuation(completed)
+            return
+        }
+
         val targetFile = if (isAudioFile) {
-            // 音频文件模式：保存到字幕文件
             subtitleFile
         } else {
-            // 普通模式：保存到当前文件
             currentFile
         }
         
         if (isNewFile || targetFile == null) {
-            saveFileAs()
+            launchSaveFilePicker()
             return
         }
 
-        saveWithContent { content ->
+        val completed = stateModel.saveCoordinator.complete(saveWithContent { content ->
             FileUtils.writeFile(targetFile, content, currentCharset)
-        }
+        })
+        executeSaveContinuation(completed)
     }
     
     private fun saveFileAs() {
+        stateModel.saveCoordinator.begin(SaveContinuation.NONE)
+        launchSaveFilePicker()
+    }
+
+    private fun launchSaveFilePicker() {
         val formatExtension = if (isSourceViewMode) "txt" else getFormatExtension(currentFormat)
         saveFileLauncher.launch("subtitle.$formatExtension")
     }
     
-    private fun saveFileToUri(uri: Uri) {
-        saveWithContent { content ->
-            contentResolver.openOutputStream(uri)?.use { outputStream ->
-                outputStream.write(content.toByteArray(currentCharset))
+    private fun saveFileToUri(uri: Uri): Boolean {
+        val saved = saveWithContent { content ->
+            EditorDocumentWriter.write(content, currentCharset) {
+                contentResolver.openOutputStream(uri)
             }
         }
-        isNewFile = false
+        if (saved) {
+            stateModel.documentUri = uri.toString()
+            takePersistableWritePermission(uri)
+            isNewFile = false
+            setDocumentTitle(getFileNameFromUri(uri))
+        }
+        return saved
+    }
+
+    private fun takePersistableWritePermission(uri: Uri) {
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+    }
+
+    private fun executeSaveContinuation(continuation: SaveContinuation) {
+        when (continuation) {
+            SaveContinuation.NONE -> Unit
+            SaveContinuation.FINISH -> finish()
+            SaveContinuation.ENTER_SOURCE_VIEW -> reloadAndEnterSourceView()
+        }
     }
     
     private fun showEncodingDialog() {
@@ -1594,7 +1713,7 @@ class EditorActivity : AppCompatActivity() {
         lastIndexedEntryCount = currentCount
     }
 
-    private fun setSubtitleEntries(entries: List<SubtitleEntry>) {
+    private fun replaceSubtitleEntries(entries: List<SubtitleEntry>) {
         subtitleEntries = entries.toMutableList()
         renumberEntries(force = true)
     }
@@ -1759,14 +1878,16 @@ class EditorActivity : AppCompatActivity() {
         finish()
     }
 
-    private inline fun saveWithContent(writeAction: (String) -> Unit) {
-        try {
-            val content = getCurrentEditableContent() ?: return
+    private inline fun saveWithContent(writeAction: (String) -> Unit): Boolean {
+        return try {
+            val content = getCurrentEditableContent() ?: return false
             writeAction(content)
             hasUnsavedChanges = false
             showShortToast("保存成功")
+            true
         } catch (e: Exception) {
             showShortToast("保存失败：${e.message}")
+            false
         }
     }
 
@@ -1792,8 +1913,7 @@ class EditorActivity : AppCompatActivity() {
                 .setTitle("提示")
                 .setMessage("是否保存更改？")
                 .setPositiveButton("保存") { _, _ ->
-                    saveFile()
-                    finish()
+                    saveFile(SaveContinuation.FINISH)
                 }
                 .setNegativeButton("不保存") { _, _ ->
                     finish()
@@ -1805,6 +1925,26 @@ class EditorActivity : AppCompatActivity() {
         }
     }
     
+    override fun onStop() {
+        if (::playbackController.isInitialized) {
+            stateModel.playbackPositionMs = playbackController.currentPositionMs
+        }
+        if (::subtitleAdapter.isInitialized) {
+            stateModel.selectedIndices = subtitleAdapter.getSelectedPositions()
+            if (isSourceViewMode) {
+                savedScrollPosition = binding.svSourceView.scrollY
+            } else {
+                val layoutManager = binding.rvSubtitles.layoutManager as? LinearLayoutManager
+                val position = layoutManager?.findFirstVisibleItemPosition() ?: -1
+                if (position >= 0) {
+                    savedFirstVisibleItemPosition = position
+                    savedScrollPosition = layoutManager?.findViewByPosition(position)?.top ?: 0
+                }
+            }
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
         ttsController.release()
         super.onDestroy()
@@ -1852,7 +1992,7 @@ class EditorActivity : AppCompatActivity() {
     /**
      * 加载音频文件
      */
-    private fun loadAudioFile(subtitleFilePath: String?) {
+    private fun loadAudioFile(subtitleFilePath: String?, restoreDocument: Boolean = false) {
         if (filePath.isEmpty() || currentFile == null) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "音频文件路径无效", Toast.LENGTH_SHORT).show()
             finish()
@@ -1887,15 +2027,22 @@ class EditorActivity : AppCompatActivity() {
             }
             
             // 使用修复后的文件路径继续加载
-            doLoadAudioFile(preparedAudio.file, subtitleFilePath)
+            doLoadAudioFile(preparedAudio.file, subtitleFilePath, restoreDocument)
         }
     }
     
     /**
      * 实际执行音频加载（原 loadAudioFile 的主体逻辑）
      */
-    private fun doLoadAudioFile(audioFile: File, subtitleFilePath: String?) {
-        supportActionBar?.title = subtitleFilePath?.let { File(it).name } ?: "（无字幕文件）"
+    private fun doLoadAudioFile(
+        audioFile: File,
+        subtitleFilePath: String?,
+        restoreDocument: Boolean
+    ) {
+        setDocumentTitle(
+            if (restoreDocument) stateModel.documentTitle
+            else subtitleFilePath?.let { File(it).name } ?: "（无字幕文件）"
+        )
         
         try {
             playbackController.prepare(audioFile)
@@ -1903,7 +2050,12 @@ class EditorActivity : AppCompatActivity() {
             com.subtitleedit.util.OverwritingToast.makeText(this, "加载音频失败：${e.message}", Toast.LENGTH_SHORT).show()
         }
         
-        if (subtitleFilePath != null) {
+        if (restoreDocument) {
+            syncWaveformSubtitles()
+            if (stateModel.playbackPositionMs > 0L) {
+                playbackController.seekTo(stateModel.playbackPositionMs)
+            }
+        } else if (subtitleFilePath != null) {
             val subtitleFile = File(subtitleFilePath)
             if (subtitleFile.exists()) {
                 loadSubtitleFile(subtitleFile)
@@ -1922,6 +2074,7 @@ class EditorActivity : AppCompatActivity() {
             playbackController.durationMs,
             subtitleEntries.toList()
         )
+        stateModel.documentLoaded = true
     }
 
     /**

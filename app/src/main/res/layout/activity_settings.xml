@@ -26,7 +26,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="默认编码"
+                android:text="@string/activity_settings_text_01"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="8dp" />
@@ -61,7 +61,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="主题"
+                    android:text="@string/activity_settings_text_02"
                     android:textSize="16sp"/>
 
                 <TextView
@@ -95,7 +95,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="AI 翻译设置"
+                    android:text="@string/activity_ai_settings_text_01"
                     android:textSize="16sp"/>
 
             </LinearLayout>
@@ -122,7 +122,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="语音转录设置"
+                    android:text="@string/activity_settings_text_03"
                     android:textSize="16sp"/>
 
             </LinearLayout>
@@ -176,7 +176,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="模型管理"
+                    android:text="@string/activity_settings_text_04"
                     android:textSize="16sp" />
 
             </LinearLayout>
@@ -203,7 +203,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="清除缓存"
+                    android:text="@string/activity_settings_text_05"
                     android:textSize="16sp" />
 
                 <TextView
@@ -237,7 +237,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="运行日志"
+                    android:text="@string/activity_settings_text_06"
                     android:textSize="16sp"/>
 
             </LinearLayout>
@@ -259,14 +259,14 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="启动时检查更新"
+                        android:text="@string/activity_settings_text_07"
                         android:textSize="14sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="启动应用时自动检查是否有新版本"
+                        android:text="@string/activity_settings_text_08"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 
@@ -283,7 +283,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="播放行为"
+                android:text="@string/activity_settings_text_09"
                 android:textStyle="bold"
                 android:paddingTop="16dp"
                 android:paddingBottom="4dp"/>
@@ -305,13 +305,13 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="限定区间循环播放"
+                        android:text="@string/activity_settings_text_10"
                         android:textSize="14sp"/>
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="长按波形字幕块限定区间并双击播放时，结束后自动回到开头循环；关闭则播放一次后暂停"
+                        android:text="@string/activity_settings_text_11"
                         android:textSize="12sp"
                         android:textColor="@color/on_surface_variant"
                         android:paddingTop="2dp"/>
@@ -330,7 +330,7 @@
                 android:layout_height="wrap_content"
                 android:paddingTop="16dp"
                 android:paddingBottom="4dp"
-                android:text="文件管理"
+                android:text="@string/activity_settings_text_12"
                 android:textStyle="bold" />
 
             <LinearLayout
@@ -350,14 +350,14 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="显示所有类型文件"
+                        android:text="@string/activity_settings_text_13"
                         android:textSize="14sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:paddingTop="2dp"
-                        android:text="在文件列表中显示字幕和音频之外的文件"
+                        android:text="@string/activity_settings_text_14"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 
@@ -387,14 +387,14 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="显示隐藏文件"
+                        android:text="@string/activity_settings_text_15"
                         android:textSize="14sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:paddingTop="2dp"
-                        android:text="显示以“.”开头文件和文件夹"
+                        android:text="@string/activity_settings_text_16"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 

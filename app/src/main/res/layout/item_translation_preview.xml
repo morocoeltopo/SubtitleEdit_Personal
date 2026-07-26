@@ -18,7 +18,7 @@
             android:id="@+id/checkApplyTranslation"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:contentDescription="应用此行翻译" />
+            android:contentDescription="@string/item_translation_preview_contentdescription_01" />
 
         <TextView
             android:id="@+id/tvOriginalTranslation"

@@ -13,7 +13,7 @@
         android:id="@+id/tvConflictTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="覆盖文件？"
+        android:text="@string/dialog_archive_conflict_text_01"
         android:textColor="?android:attr/textColorPrimary"
         android:textSize="24sp"
         android:textStyle="bold" />
@@ -32,7 +32,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="源文件"
+        android:text="@string/activity_media_convert_text_01"
         android:textColor="?android:attr/textColorPrimary"
         android:textSize="16sp" />
 
@@ -58,7 +58,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:text="替换"
+        android:text="@string/activity_editor_text_01"
         android:textColor="?android:attr/textColorPrimary"
         android:textSize="16sp" />
 
@@ -84,7 +84,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="所有文件"
+        android:text="@string/dialog_archive_conflict_text_02"
         android:textColor="?android:attr/textColorPrimary"
         android:textSize="16sp" />
 
@@ -106,7 +106,7 @@
             android:minWidth="0dp"
             android:paddingStart="2dp"
             android:paddingEnd="2dp"
-            android:text="取消"
+            android:text="@string/cancel"
             android:textSize="14sp"
             app:cornerRadius="0dp" />
 
@@ -121,7 +121,7 @@
             android:minWidth="0dp"
             android:paddingStart="2dp"
             android:paddingEnd="2dp"
-            android:text="重命名"
+            android:text="@string/activity_main_contentdescription_03"
             android:textSize="14sp"
             app:cornerRadius="0dp" />
 
@@ -136,7 +136,7 @@
             android:minWidth="0dp"
             android:paddingStart="2dp"
             android:paddingEnd="2dp"
-            android:text="跳过"
+            android:text="@string/dialog_archive_conflict_text_03"
             android:textSize="14sp"
             app:cornerRadius="0dp" />
 
@@ -151,7 +151,7 @@
             android:minWidth="0dp"
             android:paddingStart="2dp"
             android:paddingEnd="2dp"
-            android:text="覆盖"
+            android:text="@string/dialog_archive_conflict_text_04"
             android:textSize="14sp"
             app:cornerRadius="0dp" />
 

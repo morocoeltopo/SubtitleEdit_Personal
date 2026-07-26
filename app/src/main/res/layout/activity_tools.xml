@@ -63,7 +63,7 @@
                             android:src="@drawable/ic_convert"
                             android:padding="8dp"
                             android:background="@drawable/bg_icon_circle"
-                            android:contentDescription="批量转换" />
+                            android:contentDescription="@string/batch_convert" />
 
                         <!-- 标题和描述 -->
                         <LinearLayout
@@ -77,7 +77,7 @@
                                 android:id="@+id/btnBatchConvert"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="字幕格式转换"
+                                android:text="@string/activity_tools_text_01"
                                 android:textSize="16sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/on_surface" />
@@ -86,7 +86,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
-                                android:text="批量转换字幕格式（SRT/LRC）"
+                                android:text="@string/activity_tools_text_02"
                                 android:textSize="14sp"
                                 android:textColor="@color/on_surface_variant" />
 
@@ -97,7 +97,7 @@
                             android:layout_width="24dp"
                             android:layout_height="24dp"
                             android:src="@drawable/ic_arrow_right"
-                            android:contentDescription="进入" />
+                            android:contentDescription="@string/activity_tools_contentdescription_01" />
 
                     </LinearLayout>
 
@@ -125,7 +125,7 @@
                             android:layout_width="48dp"
                             android:layout_height="48dp"
                             android:background="@drawable/bg_icon_circle"
-                            android:contentDescription="字幕格式化"
+                            android:contentDescription="@string/activity_tools_contentdescription_02"
                             android:padding="8dp"
                             android:src="@drawable/ic_subtitle_format" />
 
@@ -139,7 +139,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="格式化工具"
+                                android:text="@string/activity_tools_text_03"
                                 android:textColor="@color/on_surface"
                                 android:textSize="16sp"
                                 android:textStyle="bold" />
@@ -148,7 +148,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
-                                android:text="清除标点和字间空格、替换标点"
+                                android:text="@string/activity_tools_text_04"
                                 android:textColor="@color/on_surface_variant"
                                 android:textSize="14sp" />
                         </LinearLayout>
@@ -156,7 +156,7 @@
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:contentDescription="进入"
+                            android:contentDescription="@string/activity_tools_contentdescription_01"
                             android:src="@drawable/ic_arrow_right" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -183,7 +183,7 @@
                             android:layout_width="48dp"
                             android:layout_height="48dp"
                             android:background="@drawable/bg_icon_circle"
-                            android:contentDescription="人声分离"
+                            android:contentDescription="@string/activity_tools_contentdescription_03"
                             android:padding="8dp"
                             android:src="@drawable/ic_vocal_separation" />
 
@@ -197,7 +197,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="人声分离"
+                                android:text="@string/activity_tools_contentdescription_03"
                                 android:textColor="@color/on_surface"
                                 android:textSize="16sp"
                                 android:textStyle="bold" />
@@ -206,7 +206,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
-                                android:text="使用 HTDemucs ONNX 分离 Vocals、Drums、Bass、Other"
+                                android:text="@string/activity_tools_text_05"
                                 android:textColor="@color/on_surface_variant"
                                 android:textSize="14sp" />
                         </LinearLayout>
@@ -214,7 +214,7 @@
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:contentDescription="进入"
+                            android:contentDescription="@string/activity_tools_contentdescription_01"
                             android:src="@drawable/ic_arrow_right" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -244,7 +244,7 @@
                             android:src="@drawable/ic_speech_to_subtitle"
                             android:padding="5dp"
                             android:background="@drawable/bg_icon_circle"
-                            android:contentDescription="语音转字幕" />
+                            android:contentDescription="@string/activity_tools_contentdescription_04" />
 
                         <!-- 标题和描述 -->
                         <LinearLayout
@@ -258,7 +258,7 @@
                                 android:id="@+id/btnSpeechToSubtitle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="语音转字幕"
+                                android:text="@string/activity_tools_contentdescription_04"
                                 android:textSize="16sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/on_surface" />
@@ -267,7 +267,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
-                                android:text="音频/视频转字幕，支持多种语言识别"
+                                android:text="@string/activity_tools_text_06"
                                 android:textSize="14sp"
                                 android:textColor="@color/on_surface_variant" />
 
@@ -278,7 +278,7 @@
                             android:layout_width="24dp"
                             android:layout_height="24dp"
                             android:src="@drawable/ic_arrow_right"
-                            android:contentDescription="进入" />
+                            android:contentDescription="@string/activity_tools_contentdescription_01" />
 
                     </LinearLayout>
 
@@ -309,7 +309,7 @@
                             android:src="@drawable/ic_media_convert"
                             android:padding="3dp"
                             android:background="@drawable/bg_icon_circle"
-                            android:contentDescription="音视频转换" />
+                            android:contentDescription="@string/activity_tools_contentdescription_05" />
 
                         <!-- 标题和描述 -->
                         <LinearLayout
@@ -323,7 +323,7 @@
                                 android:id="@+id/btnMediaConvert"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="音视频转换"
+                                android:text="@string/activity_tools_contentdescription_05"
                                 android:textSize="16sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/on_surface" />
@@ -332,7 +332,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
-                                android:text="视频转音频/格式转换 (MP3/AAC/MP4 等)"
+                                android:text="@string/activity_tools_text_07"
                                 android:textSize="14sp"
                                 android:textColor="@color/on_surface_variant" />
 
@@ -343,7 +343,7 @@
                             android:layout_width="24dp"
                             android:layout_height="24dp"
                             android:src="@drawable/ic_arrow_right"
-                            android:contentDescription="进入" />
+                            android:contentDescription="@string/activity_tools_contentdescription_01" />
 
                     </LinearLayout>
 
@@ -374,7 +374,7 @@
                             android:src="@drawable/ic_auto_timestamp"
                             android:padding="8dp"
                             android:background="@drawable/bg_icon_circle"
-                            android:contentDescription="自动打轴" />
+                            android:contentDescription="@string/activity_tools_contentdescription_06" />
 
                         <!-- 标题和描述 -->
                         <LinearLayout
@@ -387,7 +387,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="自动打轴"
+                                android:text="@string/activity_tools_contentdescription_06"
                                 android:textSize="16sp"
                                 android:textStyle="bold"
                                 android:textColor="@color/on_surface" />
@@ -396,7 +396,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
-                                android:text="使用 VAD 自动检测语音段并生成时间轴"
+                                android:text="@string/activity_tools_text_08"
                                 android:textSize="14sp"
                                 android:textColor="@color/on_surface_variant" />
 
@@ -407,7 +407,7 @@
                             android:layout_width="24dp"
                             android:layout_height="24dp"
                             android:src="@drawable/ic_arrow_right"
-                            android:contentDescription="进入" />
+                            android:contentDescription="@string/activity_tools_contentdescription_01" />
 
                     </LinearLayout>
 

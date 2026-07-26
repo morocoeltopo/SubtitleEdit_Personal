@@ -60,7 +60,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="→"
+                    android:text="@string/item_subtitle_text_01"
                     android:textColor="@color/on_surface"
                     android:textSize="12sp"
                     android:paddingHorizontal="4dp" />
@@ -110,7 +110,7 @@
                 android:layout_height="24dp"
                 android:src="@drawable/ic_check"
                 android:visibility="gone"
-                android:contentDescription="selected" />
+                android:contentDescription="@string/item_subtitle_contentdescription_01" />
             
             <!-- 右上按钮：跳转到字幕时间 -->
             <ImageButton
@@ -119,7 +119,7 @@
                 android:layout_height="32dp"
                 android:src="@android:drawable/ic_media_play"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="跳转到字幕时间"
+                android:contentDescription="@string/item_subtitle_contentdescription_02"
                 android:visibility="gone"
                 android:scaleType="centerInside" />
             
@@ -130,7 +130,7 @@
                 android:layout_height="32dp"
                 android:src="@android:drawable/ic_menu_edit"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="设置字幕时间"
+                android:contentDescription="@string/item_subtitle_contentdescription_03"
                 android:visibility="gone"
                 android:scaleType="centerInside" />
         </LinearLayout>

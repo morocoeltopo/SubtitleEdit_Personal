@@ -49,7 +49,7 @@
                         android:id="@+id/tvRecognitionFlowTitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="识别流程"
+                        android:text="@string/activity_speech_to_subtitle_settings_text_01"
                         android:textColor="@color/on_surface"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -59,7 +59,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="固定分段时长"
+                        android:text="@string/activity_speech_to_subtitle_settings_text_02"
                         android:textColor="@color/on_surface"
                         android:textSize="14sp" />
 
@@ -68,7 +68,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="未使用 VAD 分段时生效"
+                        android:text="@string/activity_speech_to_subtitle_settings_text_03"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 
@@ -103,7 +103,7 @@
                                 android:gravity="center"
                                 android:inputType="number"
                                 android:maxLines="1"
-                                android:text="30"
+                                android:text="@string/activity_speech_to_subtitle_settings_text_04"
                                 android:textSize="14sp" />
 
                         </com.google.android.material.textfield.TextInputLayout>
@@ -115,7 +115,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="Whisper 线程数"
+                        android:text="@string/activity_speech_to_subtitle_settings_text_05"
                         android:textColor="@color/on_surface"
                         android:textSize="14sp" />
 
@@ -124,7 +124,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="线程越多速度可能越快，但内存和发热也会增加"
+                        android:text="@string/activity_speech_to_subtitle_settings_text_06"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 
@@ -150,7 +150,7 @@
                             android:layout_width="56dp"
                             android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:text="4"
+                            android:text="@string/activity_speech_to_subtitle_settings_text_07"
                             android:textColor="@color/on_surface"
                             android:textSize="14sp" />
 
@@ -178,7 +178,7 @@
                         android:id="@+id/switchHotwords"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="启用热词"
+                        android:text="@string/activity_speech_to_subtitle_settings_text_08"
                         android:textColor="@color/on_surface"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -187,7 +187,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="提高特定词汇的识别倾向，仍会输出完整字幕"
+                        android:text="@string/activity_speech_to_subtitle_settings_text_09"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 
@@ -196,7 +196,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:hint="热词">
+                        android:hint="@string/activity_speech_to_subtitle_settings_hint_01">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etHotwords"
@@ -213,7 +213,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="每行一个词或短语"
+                        android:text="@string/activity_speech_to_subtitle_settings_text_10"
                         android:textColor="@color/on_surface_variant"
                         android:textSize="12sp" />
 
@@ -223,13 +223,13 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="保存热词" />
+                        android:text="@string/activity_speech_to_subtitle_settings_text_11" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
-                        android:text="热词权重"
+                        android:text="@string/activity_speech_to_subtitle_settings_text_12"
                         android:textColor="@color/on_surface"
                         android:textSize="14sp" />
 
@@ -254,7 +254,7 @@
                             android:layout_width="56dp"
                             android:layout_height="wrap_content"
                             android:gravity="center"
-                            android:text="1.5"
+                            android:text="@string/activity_speech_to_subtitle_settings_text_13"
                             android:textColor="@color/on_surface"
                             android:textSize="14sp" />
 

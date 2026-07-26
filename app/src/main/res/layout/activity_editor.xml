@@ -113,7 +113,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:hint="替换为"
+                        android:hint="@string/activity_editor_hint_01"
                         android:inputType="text"
                         android:maxLines="1"
                         android:background="@null"
@@ -127,7 +127,7 @@
                         style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="替换"
+                        android:text="@string/activity_editor_text_01"
                         android:textSize="12sp"
                         android:layout_marginEnd="4dp" />
 
@@ -137,7 +137,7 @@
                         style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="全部替换"
+                        android:text="@string/activity_editor_text_02"
                         android:textSize="12sp" />
 
                 </LinearLayout>
@@ -174,7 +174,7 @@
                         android:layout_width="24dp"
                         android:layout_height="24dp"
                         android:src="@drawable/ic_file"
-                        android:contentDescription="音频文件"
+                        android:contentDescription="@string/activity_editor_contentdescription_01"
                         app:tint="@color/primary" />
 
                     <TextView
@@ -215,14 +215,14 @@
                             android:id="@+id/btnToggleWaveform"
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:text="▼"
+                            android:text="@string/activity_editor_text_03"
                             android:gravity="center"
                             android:textSize="11sp"
                             android:textColor="#CCCCCC"
                             android:background="@drawable/bg_waveform_btn"
                             android:clickable="true"
                             android:focusable="true"
-                            android:contentDescription="展开/折叠波形图"/>
+                            android:contentDescription="@string/activity_editor_contentdescription_02"/>
 
                         <!-- 打轴按钮 -->
                         <ImageButton
@@ -233,7 +233,7 @@
                             android:src="@drawable/ic_insert_subtitle"
                             android:background="@drawable/bg_waveform_btn"
                             android:padding="3dp"
-                            android:contentDescription="插入字幕（打轴）" />
+                            android:contentDescription="@string/activity_editor_contentdescription_03" />
 
                         <!-- 对选中的字幕行按其时间范围进行语音转录 -->
                         <ImageButton
@@ -244,7 +244,7 @@
                             android:src="@drawable/ic_quick_transcribe"
                             android:background="@drawable/bg_waveform_btn"
                             android:padding="3dp"
-                            android:contentDescription="快速转录选中的字幕" />
+                            android:contentDescription="@string/activity_editor_contentdescription_04" />
 
                         <!-- 使用设置中选定的 TTS 引擎朗读选中字幕 -->
                         <ImageButton
@@ -267,7 +267,7 @@
                             android:id="@+id/btnToggleDisplayMode"
                             android:layout_width="wrap_content"
                             android:layout_height="24dp"
-                            android:text="波形"
+                            android:text="@string/activity_editor_text_04"
                             android:paddingStart="8dp"
                             android:paddingEnd="8dp"
                             android:gravity="center"
@@ -277,14 +277,14 @@
                             android:clickable="true"
                             android:focusable="true"
                             android:layout_marginEnd="4dp"
-                            android:contentDescription="切换波形/频谱"/>
+                            android:contentDescription="@string/activity_editor_contentdescription_05"/>
 
                         <!-- 振幅缩小 -->
                         <TextView
                             android:id="@+id/btnAmplitudeZoomOut"
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:text="−"
+                            android:text="@string/activity_editor_text_05"
                             android:gravity="center"
                             android:textSize="15sp"
                             android:textColor="#CCCCCC"
@@ -292,21 +292,21 @@
                             android:clickable="true"
                             android:focusable="true"
                             android:layout_marginEnd="4dp"
-                            android:contentDescription="缩小振幅"/>
+                            android:contentDescription="@string/activity_editor_contentdescription_06"/>
 
                         <!-- 振幅放大（长按重置） -->
                         <TextView
                             android:id="@+id/btnAmplitudeZoomIn"
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:text="+"
+                            android:text="@string/activity_editor_text_06"
                             android:gravity="center"
                             android:textSize="15sp"
                             android:textColor="#CCCCCC"
                             android:background="@drawable/bg_waveform_btn"
                             android:clickable="true"
                             android:focusable="true"
-                            android:contentDescription="放大振幅（长按重置）"/>
+                            android:contentDescription="@string/activity_editor_contentdescription_07"/>
 
                     </LinearLayout>
 
@@ -331,7 +331,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_gravity="center"
-                            android:text="生成波形图"
+                            android:text="@string/activity_editor_text_07"
                             android:visibility="gone" />
 
                     </com.google.android.material.card.MaterialCardView>
@@ -367,7 +367,7 @@
                             android:layout_height="32dp"
                             android:src="@android:drawable/ic_media_play"
                             android:background="?attr/selectableItemBackgroundBorderless"
-                            android:contentDescription="播放/暂停"
+                            android:contentDescription="@string/activity_editor_contentdescription_08"
                             android:layout_marginEnd="4dp"
                             app:tint="@color/primary" />
 
@@ -376,7 +376,7 @@
                             android:id="@+id/tvPlaybackSpeed"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="1.0×"
+                            android:text="@string/activity_editor_text_08"
                             android:textSize="11sp"
                             android:textColor="@color/primary"
                             android:paddingStart="6dp"
@@ -387,7 +387,7 @@
                             android:layout_marginEnd="6dp"
                             android:clickable="true"
                             android:focusable="true"
-                            android:contentDescription="播放速度" />
+                            android:contentDescription="@string/activity_editor_contentdescription_09" />
 
                         <!-- 等宽字体：每个数字字形宽度一致，彻底消除抖动 -->
                         <TextView

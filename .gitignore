@@ -44,7 +44,6 @@ gen/
 out/
 
 # Tests
-**/src/androidTest/
 test-results/
 reports/
 
@@ -111,3 +110,8 @@ coverage/
 *.hprof
 hs_err_pid*
 replay_pid*
+
+# Keep instrumentation tests for the app while ignoring generated copies elsewhere.
+**/src/androidTest/
+!app/src/androidTest/
+!app/src/androidTest/**

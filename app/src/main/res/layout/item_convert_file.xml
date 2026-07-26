@@ -64,7 +64,7 @@
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_delete"
-            android:contentDescription="删除"
+            android:contentDescription="@string/delete"
             app:tint="@color/error" />
 
     </LinearLayout>
