@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.subtitleedit.databinding.ActivitySpeechToSubtitleSettingsBinding
 import com.subtitleedit.util.OverwritingToast
 import com.subtitleedit.util.SettingsManager
+import java.util.Locale
 
 class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
 
@@ -68,7 +69,7 @@ class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
         }
 
         binding.sliderHotwordsScore.addOnChangeListener { _, value, _ ->
-            binding.tvHotwordsScore.text = String.format("%.1f", value)
+            binding.tvHotwordsScore.text = String.format(Locale.getDefault(), "%.1f", value)
             if (!loading) settingsManager.setSpeechHotwordsScore(value)
         }
         binding.sliderWhisperThreads.addOnChangeListener { _, value, _ ->
@@ -89,7 +90,7 @@ class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
 
         val hotwordsScore = settingsManager.getSpeechHotwordsScore()
         binding.sliderHotwordsScore.value = hotwordsScore
-        binding.tvHotwordsScore.text = String.format("%.1f", hotwordsScore)
+        binding.tvHotwordsScore.text = String.format(Locale.getDefault(), "%.1f", hotwordsScore)
 
         val whisperThreads = settingsManager.getSpeechWhisperThreads()
         binding.sliderWhisperThreads.value = whisperThreads.toFloat()

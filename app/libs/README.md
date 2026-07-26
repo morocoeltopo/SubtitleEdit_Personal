@@ -1,5 +1,3 @@
-# sherpa-onnx 集成说明
-
 ## FFmpegKitNext
 
 FFmpegKitNext 8.1.0 的本地 Maven 产物位于：
@@ -8,22 +6,20 @@ FFmpegKitNext 8.1.0 的本地 Maven 产物位于：
 app/libs/ffmpeg-kit-next-maven/com/arthenica/ffmpeg-kit-next/8.1.0/
 ```
 
-该 AAR 使用上游 `android-r27d` profile 在 API 24 上构建，仅包含
-`armeabi-v7a` 和 `arm64-v8a`。重新生成时使用：
+该 AAR 使用上游 `android-r27d` profile 在 API 24 上构建，包含
+`armeabi-v7a`、`arm64-v8a`、`x86` 和 `x86_64`。重新生成时使用：
 
 ```bash
 ./nix-android.sh \
   -p android-r27d \
   --enable-android-zlib \
-  --disable-arm-v7a-neon \
-  --disable-x86 \
-  --disable-x86-64
+  --disable-arm-v7a-neon
 ```
 
 AAR SHA-256：
 
 ```text
-F8C1168AF4D48625F1DB6250AC553657715F27EA705FC1556CC223CC8A062897
+F4F34356D184CDB08C6CA96A35504D29931708E93EC0071E69C627DB9835C30B
 ```
 
 ## sherpa-onnx
@@ -35,10 +31,11 @@ sherpa-onnx v1.13.4 已成功集成到项目中。
 ### 集成内容
 
 1. **Kotlin API 源码**
+
    - 位置：`app/src/main/java/com/k2fsa/sherpa/onnx/`
    - 包含所有必需的 API 类（OfflineRecognizer、OfflineStream 等）
-
 2. **Native 库文件**
+
    - 位置：`app/src/main/jniLibs/`
    - 支持架构：
      - arm64-v8a (主流 64 位设备)
@@ -49,6 +46,7 @@ sherpa-onnx v1.13.4 已成功集成到项目中。
 ### 使用方法
 
 直接在代码中导入使用：
+
 ```kotlin
 import com.k2fsa.sherpa.onnx.*
 

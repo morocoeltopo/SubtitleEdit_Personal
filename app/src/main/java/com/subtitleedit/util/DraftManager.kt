@@ -80,7 +80,7 @@ object DraftManager {
     fun saveDraft(context: Context, fileName: String, content: String): String {
         val draftFolder = getDraftFolder(context, fileName)
         val number = getNextDraftNumber(context, fileName)
-        val draftFileName = String.format("%02d_%s", number, fileName)
+        val draftFileName = String.format(Locale.US, "%02d_%s", number, fileName)
         val draftFile = File(draftFolder, draftFileName)
         
         draftFile.writeText(content)

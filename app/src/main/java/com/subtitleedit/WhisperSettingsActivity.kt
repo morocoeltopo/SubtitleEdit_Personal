@@ -5,6 +5,7 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.subtitleedit.databinding.ActivitySpeechToSubtitleSettingsBinding
 import com.subtitleedit.util.SettingsManager
+import java.util.Locale
 
 /** Whisper-specific controls. The shared layout also keeps the segmentation setting available. */
 class WhisperSettingsActivity : AppCompatActivity() {
@@ -34,7 +35,7 @@ class WhisperSettingsActivity : AppCompatActivity() {
             if (!loading) settings.setSpeechHotwordsEnabled(checked)
         }
         binding.sliderHotwordsScore.addOnChangeListener { _, value, _ ->
-            binding.tvHotwordsScore.text = String.format("%.1f", value)
+            binding.tvHotwordsScore.text = String.format(Locale.getDefault(), "%.1f", value)
             if (!loading) settings.setSpeechHotwordsScore(value)
         }
         binding.btnSaveHotwords.setOnClickListener {
@@ -47,7 +48,7 @@ class WhisperSettingsActivity : AppCompatActivity() {
         binding.switchHotwords.isChecked = settings.isSpeechHotwordsEnabled()
         binding.etHotwords.setText(settings.getSpeechHotwords())
         binding.sliderHotwordsScore.value = settings.getSpeechHotwordsScore()
-        binding.tvHotwordsScore.text = String.format("%.1f", settings.getSpeechHotwordsScore())
+        binding.tvHotwordsScore.text = String.format(Locale.getDefault(), "%.1f", settings.getSpeechHotwordsScore())
         loading = false
     }
 }

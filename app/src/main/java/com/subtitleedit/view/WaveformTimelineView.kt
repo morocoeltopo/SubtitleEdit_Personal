@@ -13,6 +13,7 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import com.subtitleedit.model.SubtitleEntry
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
@@ -608,12 +609,12 @@ class WaveformTimelineView @JvmOverloads constructor(
 
         return when {
             intervalMs < 1_000L ->
-                if (h > 0) String.format("%d:%02d:%02d.%d", h, m, s, ds)
-                else       String.format("%d:%02d.%d", m, s, ds)
+                if (h > 0) String.format(Locale.getDefault(), "%d:%02d:%02d.%d", h, m, s, ds)
+                else       String.format(Locale.getDefault(), "%d:%02d.%d", m, s, ds)
             h > 0 ->
-                String.format("%d:%02d:%02d", h, m, s)
+                String.format(Locale.getDefault(), "%d:%02d:%02d", h, m, s)
             else ->
-                String.format("%d:%02d", m, s)
+                String.format(Locale.getDefault(), "%d:%02d", m, s)
         }
     }
 

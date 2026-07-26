@@ -17,9 +17,10 @@ object SearchReplaceOps {
         replacement: String
     ): String? {
         if (!originalText.contains(query, ignoreCase = true)) return null
+        // escapeReplacement：替换内容中的 $ 和 \ 必须按字面处理，否则会被当作正则组引用导致异常
         val updated = originalText.replace(
             Regex(Regex.escape(query), RegexOption.IGNORE_CASE),
-            replacement
+            Regex.escapeReplacement(replacement)
         )
         return if (updated != originalText) updated else null
     }
@@ -60,7 +61,7 @@ object SearchReplaceOps {
     ): ReplaceAllInTextResult {
         val regex = Regex(Regex.escape(query), RegexOption.IGNORE_CASE)
         val matchCount = regex.findAll(content).count()
-        val newContent = content.replace(regex, replacement)
+        val newContent = content.replace(regex, Regex.escapeReplacement(replacement))
         return ReplaceAllInTextResult(newContent, matchCount)
     }
 }

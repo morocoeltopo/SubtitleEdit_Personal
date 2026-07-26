@@ -244,8 +244,11 @@ object SubtitleParser {
         val minutes = parts[1].toLongOrNull() ?: 0L
         val secondsParts = parts[2].split(".")
         val seconds = secondsParts[0].toLongOrNull() ?: 0L
-        val millis = secondsParts.getOrNull(1)?.toLongOrNull() ?: 0L
-        
+        // 毫秒按位数补齐："5" 表示 0.5 秒（500ms）而不是 5ms
+        val millisPart = secondsParts.getOrNull(1).orEmpty()
+        val millis = if (millisPart.isEmpty()) 0L
+            else (millisPart.take(3).padEnd(3, '0').toLongOrNull() ?: 0L)
+
         return hours * 3600000 + minutes * 60000 + seconds * 1000 + millis
     }
     

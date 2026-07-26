@@ -7,6 +7,7 @@ import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import java.io.File
+import java.util.Locale
 
 /**
  * VAD 时间轴生成器 - 使用 VAD 检测语音段并生成字幕时间轴
@@ -205,7 +206,7 @@ class VadTimestampGenerator(private val context: Context) {
         val minutes = (milliseconds % 3600000) / 60000
         val seconds = (milliseconds % 60000) / 1000
         val millis = milliseconds % 1000
-        return String.format("%02d:%02d:%02d,%03d", hours, minutes, seconds, millis)
+        return String.format(Locale.US, "%02d:%02d:%02d,%03d", hours, minutes, seconds, millis)
     }
 
     /**

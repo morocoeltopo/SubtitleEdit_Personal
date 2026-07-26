@@ -1,5 +1,7 @@
 package com.subtitleedit.model
 
+import com.subtitleedit.util.TimeUtils
+
 /**
  * 字幕条目数据类
  * 表示单个字幕条目，包含时间轴和文本内容
@@ -15,22 +17,12 @@ data class SubtitleEntry(
     /**
      * 格式化时间戳为 SRT 格式 (HH:MM:SS,mmm)
      */
-    fun formatTimeSRT(timeMs: Long): String {
-        val hours = timeMs / 3600000
-        val minutes = (timeMs % 3600000) / 60000
-        val seconds = (timeMs % 60000) / 1000
-        val millis = timeMs % 1000
-        return String.format("%02d:%02d:%02d,%03d", hours, minutes, seconds, millis)
-    }
-    
+    fun formatTimeSRT(timeMs: Long): String = TimeUtils.formatSRT(timeMs)
+
     /**
      * 格式化时间戳为 LRC 格式 ([MM:SS.xx])
      */
-    fun formatTimeLRC(timeMs: Long): String {
-        val minutes = timeMs / 60000
-        val seconds = (timeMs % 60000) / 1000f
-        return String.format("[%02d:%05.2f]", minutes, seconds)
-    }
+    fun formatTimeLRC(timeMs: Long): String = TimeUtils.formatLRC(timeMs)
     
     /**
      * 获取 SRT 格式的时间轴字符串

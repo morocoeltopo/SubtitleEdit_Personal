@@ -1,5 +1,8 @@
 package com.subtitleedit.util
 
+import java.util.Locale
+import kotlin.math.roundToLong
+
 /**
  * 时间轴工具类
  * 用于时间轴的解析、格式化和偏移计算
@@ -14,16 +17,18 @@ object TimeUtils {
         val minutes = (timeMs % 3600000) / 60000
         val seconds = (timeMs % 60000) / 1000
         val millis = timeMs % 1000
-        return String.format("%02d:%02d:%02d,%03d", hours, minutes, seconds, millis)
+        return String.format(Locale.US, "%02d:%02d:%02d,%03d", hours, minutes, seconds, millis)
     }
     
     /**
      * 将毫秒时间转换为 LRC 格式字符串 ([MM:SS.xx])
+     * 使用整数厘秒运算：浮点 %05.2f 会把 59.999 秒舍入成 "60.00"，产生非法的 [MM:60.00]
      */
     fun formatLRC(timeMs: Long): String {
-        val minutes = timeMs / 60000
-        val seconds = (timeMs % 60000) / 1000f
-        return String.format("[%02d:%05.2f]", minutes, seconds)
+        val totalCentis = (timeMs + 5) / 10
+        val minutes = totalCentis / 6000
+        val centis = totalCentis % 6000
+        return String.format(Locale.US, "[%02d:%02d.%02d]", minutes, centis / 100, centis % 100)
     }
     
     /**
@@ -41,8 +46,11 @@ object TimeUtils {
         
         val secondsParts = parts[2].split(".")
         val seconds = secondsParts[0].toLongOrNull() ?: 0L
-        val millis = secondsParts.getOrNull(1)?.toLongOrNull() ?: 0L
-        
+        // 毫秒按位数补齐："5" 表示 0.5 秒（500ms）而不是 5ms
+        val millisPart = secondsParts.getOrNull(1).orEmpty()
+        val millis = if (millisPart.isEmpty()) 0L
+            else (millisPart.take(3).padEnd(3, '0').toLongOrNull() ?: 0L)
+
         return hours * 3600000 + minutes * 60000 + seconds * 1000 + millis
     }
     
@@ -58,8 +66,9 @@ object TimeUtils {
         
         val minutes = parts[0].toLongOrNull() ?: 0L
         val seconds = parts[1].toDoubleOrNull() ?: 0.0
-        
-        return minutes * 60000 + (seconds * 1000).toLong()
+
+        // roundToLong 避免二进制浮点截断：0.29 * 1000 = 289.999…，toLong 会得到 289
+        return minutes * 60000 + (seconds * 1000).roundToLong()
     }
     
     /**

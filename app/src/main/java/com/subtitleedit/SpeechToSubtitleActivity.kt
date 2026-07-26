@@ -714,14 +714,14 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
         val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60
         val millis = timeMs % 1000
-        return String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
+        return String.format(java.util.Locale.US, "%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
     }
 
     private fun formatBytes(bytes: Long): String {
         return when {
             bytes < 1024L -> "$bytes B"
-            bytes < 1024L * 1024L -> String.format("%.1f KB", bytes / 1024.0)
-            else -> String.format("%.2f MB", bytes / 1024.0 / 1024.0)
+            bytes < 1024L * 1024L -> String.format(java.util.Locale.getDefault(), "%.1f KB", bytes / 1024.0)
+            else -> String.format(java.util.Locale.getDefault(), "%.2f MB", bytes / 1024.0 / 1024.0)
         }
     }
 

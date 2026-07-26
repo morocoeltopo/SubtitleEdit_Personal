@@ -28,7 +28,7 @@ object RuntimeLogManager {
     private const val MAX_DISPLAY_LINE_CHARS = 1_500
 
     private val fileTimeFormat = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
-    private val displayTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+    private val displayTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     private val lock = Any()
 
     @Volatile

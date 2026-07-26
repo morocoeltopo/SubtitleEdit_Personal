@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 
 class ModelManagementActivity : AppCompatActivity() {
     private lateinit var binding: ActivityModelManagementBinding
@@ -338,9 +339,9 @@ class ModelManagementActivity : AppCompatActivity() {
     }
 
     private fun formatSize(bytes: Long): String = when {
-        bytes >= 1024L * 1024L * 1024L -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-        bytes >= 1024L * 1024L -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
-        bytes >= 1024L -> String.format("%.1f KB", bytes / 1024.0)
+        bytes >= 1024L * 1024L * 1024L -> String.format(Locale.getDefault(), "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+        bytes >= 1024L * 1024L -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
+        bytes >= 1024L -> String.format(Locale.getDefault(), "%.1f KB", bytes / 1024.0)
         else -> "$bytes B"
     }
 

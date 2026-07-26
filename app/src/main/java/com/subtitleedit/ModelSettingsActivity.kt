@@ -27,6 +27,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.Locale
 
 /**
  * 模型设置页面
@@ -373,7 +374,7 @@ class ModelSettingsActivity : AppCompatActivity() {
         binding.sliderVadThreshold.valueTo = VAD_THRESHOLD_MAX
         binding.sliderVadThreshold.stepSize = VAD_THRESHOLD_STEP
         binding.sliderVadThreshold.setLabelFormatter { value ->
-            String.format("%.2f", normalizeVadThreshold(value))
+            String.format(Locale.US, "%.2f", normalizeVadThreshold(value))
         }
 
         // VAD 阈值
@@ -385,7 +386,7 @@ class ModelSettingsActivity : AppCompatActivity() {
                 if (!floatEquals(binding.sliderVadThreshold.value, snapped)) {
                     binding.sliderVadThreshold.value = snapped
                 }
-                binding.etVadThreshold.setText(String.format("%.2f", snapped))
+                binding.etVadThreshold.setText(String.format(Locale.US, "%.2f", snapped))
                 binding.etVadThreshold.setSelection(binding.etVadThreshold.text?.length ?: 0)
                 updatingVadThreshold = false
             }
@@ -401,7 +402,7 @@ class ModelSettingsActivity : AppCompatActivity() {
                 val v = text.toFloatOrNull() ?: return
                 val clamped = v.coerceIn(VAD_THRESHOLD_MIN, VAD_THRESHOLD_MAX)
                 val snapped = normalizeVadThreshold(clamped)
-                val normalized = String.format("%.2f", snapped)
+                val normalized = String.format(Locale.US, "%.2f", snapped)
                 val decimalLength = text.substringAfter('.', "").takeIf { text.contains('.') }?.length ?: 0
                 val shouldNormalizeText = decimalLength >= 2 || text.toFloatOrNull() != clamped
                 updatingVadThreshold = true
@@ -419,7 +420,7 @@ class ModelSettingsActivity : AppCompatActivity() {
 
         // 最小静音时长
         binding.sliderMinSilence.addOnChangeListener { _, value, fromUser ->
-            if (fromUser) binding.etMinSilence.setText(String.format("%.2f", value))
+            if (fromUser) binding.etMinSilence.setText(String.format(Locale.US, "%.2f", value))
             settingsManager.setVadMinSilenceDuration(value)
         }
         binding.etMinSilence.addTextChangedListener(object : TextWatcher {
@@ -436,7 +437,7 @@ class ModelSettingsActivity : AppCompatActivity() {
 
         // 最小语音时长
         binding.sliderMinSpeech.addOnChangeListener { _, value, fromUser ->
-            if (fromUser) binding.etMinSpeech.setText(String.format("%.2f", value))
+            if (fromUser) binding.etMinSpeech.setText(String.format(Locale.US, "%.2f", value))
             settingsManager.setVadMinSpeechDuration(value)
         }
         binding.etMinSpeech.addTextChangedListener(object : TextWatcher {
@@ -453,7 +454,7 @@ class ModelSettingsActivity : AppCompatActivity() {
 
         // 最大语音时长
         binding.sliderMaxSpeech.addOnChangeListener { _, value, fromUser ->
-            if (fromUser) binding.etMaxSpeech.setText(String.format("%.1f", value))
+            if (fromUser) binding.etMaxSpeech.setText(String.format(Locale.US, "%.1f", value))
             settingsManager.setVadMaxSpeechDuration(value)
         }
         binding.etMaxSpeech.addTextChangedListener(object : TextWatcher {
@@ -487,16 +488,16 @@ class ModelSettingsActivity : AppCompatActivity() {
 
         settingsManager.setVadThreshold(threshold)
         binding.sliderVadThreshold.value = threshold
-        binding.etVadThreshold.setText(String.format("%.2f", threshold))
+        binding.etVadThreshold.setText(String.format(Locale.US, "%.2f", threshold))
 
         binding.sliderMinSilence.value = minSilence
-        binding.etMinSilence.setText(String.format("%.2f", minSilence))
+        binding.etMinSilence.setText(String.format(Locale.US, "%.2f", minSilence))
 
         binding.sliderMinSpeech.value = minSpeech
-        binding.etMinSpeech.setText(String.format("%.2f", minSpeech))
+        binding.etMinSpeech.setText(String.format(Locale.US, "%.2f", minSpeech))
 
         binding.sliderMaxSpeech.value = maxSpeech
-        binding.etMaxSpeech.setText(String.format("%.1f", maxSpeech))
+        binding.etMaxSpeech.setText(String.format(Locale.US, "%.1f", maxSpeech))
     }
 
     private fun handleSelectedEncoder(uri: Uri) {
