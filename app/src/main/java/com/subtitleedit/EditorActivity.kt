@@ -33,6 +33,7 @@ import com.subtitleedit.adapter.SubtitleAdapter
 import com.subtitleedit.adapter.TranslationPreviewAdapter
 import com.subtitleedit.adapter.TranslationPreviewItem
 import com.subtitleedit.databinding.ActivityEditorBinding
+import com.subtitleedit.editor.EditorAudioFilePreparer
 import com.subtitleedit.editor.EditorPlaybackController
 import com.subtitleedit.editor.EditorSearchController
 import com.subtitleedit.editor.EditorWaveformController
@@ -134,12 +135,10 @@ class EditorActivity : AppCompatActivity() {
     
     // 音频文件相关
     private var isAudioFile: Boolean = false
+    private lateinit var audioFilePreparer: EditorAudioFilePreparer
     private lateinit var playbackController: EditorPlaybackController
     private lateinit var waveformController: EditorWaveformController
-    
-    // 临时修复的 WAV 文件（start time 不为 0 时生成）
-    private var tempFixedWavFile: File? = null
-    
+
     // 文件选择器
     private val openFileLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -179,6 +178,7 @@ class EditorActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityEditorBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        audioFilePreparer = EditorAudioFilePreparer(cacheDir)
         
         filePath = intent.getStringExtra(EXTRA_FILE_PATH) ?: ""
         isAudioFile = intent.getBooleanExtra(EXTRA_IS_AUDIO_FILE, false)
@@ -2207,15 +2207,9 @@ class EditorActivity : AppCompatActivity() {
         textToSpeech?.shutdown()
         textToSpeech = null
         super.onDestroy()
+        audioFilePreparer.release()
         playbackController.release()
         waveformController.release()
-        // 清理临时修复的 WAV 文件
-        tempFixedWavFile?.let { file ->
-            if (file.exists() && !file.delete()) {
-                android.util.Log.w("EditorActivity", "无法删除临时修复 WAV：${file.absolutePath}")
-            }
-        }
-        tempFixedWavFile = null
         if (isTranslating) {
             translateCancelled = true
             activeAiTranslator?.cancel()
@@ -2226,57 +2220,6 @@ class EditorActivity : AppCompatActivity() {
     }
     
     // ==================== 音频播放器相关方法 ====================
-    
-    /**
-     * 检查音频 start time，若不为 0 则用 FFmpeg 转换为 WAV 修复
-     * @return 修复后可用的音频文件（可能是原文件，也可能是临时 WAV）
-     */
-    private suspend fun checkAndFixAudioStartTime(audioFile: File): File {
-        return withContext(Dispatchers.IO) {
-            // 用 FFprobeKit 获取 start time
-            val session = com.arthenica.ffmpegkit.FFprobeKit.getMediaInformation(audioFile.absolutePath)
-            val startTime = session.getMediaInformation()?.getStartTime()?.toDoubleOrNull() ?: 0.0
-
-            if (startTime <= 0.001) {
-                // start time 正常，直接返回原文件
-                return@withContext audioFile
-            }
-
-            android.util.Log.w("EditorActivity", "音频 start time 不为 0：$startTime，开始转换为 WAV")
-
-            // 使用唯一临时文件，避免不同目录的同名音频互相覆盖。
-            val wavFile = try {
-                File.createTempFile("audio_fixed_", ".wav", cacheDir)
-            } catch (e: Exception) {
-                android.util.Log.e("EditorActivity", "创建临时 WAV 文件失败，使用原文件", e)
-                return@withContext audioFile
-            }
-
-            try {
-                val cmd = "-y -i \"${audioFile.absolutePath}\" -c:a pcm_s16le -ar 44100 -ac 2 \"${wavFile.absolutePath}\""
-                val ffmpegSession = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
-
-                if (ffmpegSession.getReturnCode()?.isValueSuccess() == true && wavFile.length() > 44L) {
-                    android.util.Log.d("EditorActivity", "WAV 转换成功：${wavFile.absolutePath}")
-                    wavFile
-                } else {
-                    android.util.Log.e("EditorActivity", "WAV 转换失败或输出为空，使用原文件")
-                    if (!wavFile.delete()) {
-                        tempFixedWavFile = wavFile
-                        android.util.Log.w("EditorActivity", "无法删除转换失败的临时 WAV：${wavFile.absolutePath}")
-                    }
-                    audioFile
-                }
-            } catch (e: Exception) {
-                if (wavFile.exists() && !wavFile.delete()) {
-                    tempFixedWavFile = wavFile
-                    android.util.Log.w("EditorActivity", "无法删除转换失败的临时 WAV：${wavFile.absolutePath}")
-                }
-                android.util.Log.e("EditorActivity", "WAV 转换异常，使用原文件", e)
-                audioFile
-            }
-        }
-    }
     
     private fun setupAudioActions() {
         if (!isAudioFile) return
@@ -2469,16 +2412,11 @@ class EditorActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             val originalFile = currentFile!!
-            val audioFile = checkAndFixAudioStartTime(originalFile)
-            
-            val wasFixed = audioFile != originalFile
-            if (wasFixed) {
-                tempFixedWavFile = audioFile
-            }
+            val preparedAudio = audioFilePreparer.prepare(originalFile)
             
             checkingDialog.dismiss()
             
-            if (wasFixed) {
+            if (preparedAudio.wasFixed) {
                 com.subtitleedit.util.OverwritingToast.makeText(
                     this@EditorActivity,
                     "检测到音频 start time 不为 0,请注意处理,已临时修复，正在加载...",
@@ -2487,7 +2425,7 @@ class EditorActivity : AppCompatActivity() {
             }
             
             // 使用修复后的文件路径继续加载
-            doLoadAudioFile(audioFile, subtitleFilePath)
+            doLoadAudioFile(preparedAudio.file, subtitleFilePath)
         }
     }
     
