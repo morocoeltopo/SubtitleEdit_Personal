@@ -25,6 +25,23 @@ object SearchReplaceOps {
         return if (updated != originalText) updated else null
     }
 
+    fun replaceFirstTextIfChanged(
+        originalText: String,
+        query: String,
+        replacement: String
+    ): String? {
+        if (query.isEmpty()) return null
+        val match = Regex(Regex.escape(query), RegexOption.IGNORE_CASE).find(originalText)
+            ?: return null
+        return originalText.replaceRange(match.range, replacement)
+            .takeIf { it != originalText }
+    }
+
+    fun countMatches(content: String, query: String): Int {
+        if (query.isEmpty()) return 0
+        return Regex(Regex.escape(query), RegexOption.IGNORE_CASE).findAll(content).count()
+    }
+
     fun collectTextUpdates(
         texts: List<String>,
         query: String,

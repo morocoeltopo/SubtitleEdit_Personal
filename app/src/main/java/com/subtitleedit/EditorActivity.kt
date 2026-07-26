@@ -4,16 +4,10 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
-import android.text.Spannable
-import android.text.SpannableString
-import android.text.style.BackgroundColorSpan
-import android.text.style.StyleSpan
 import android.text.TextWatcher
-import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
@@ -29,10 +23,10 @@ import android.widget.TextView
 import com.subtitleedit.view.DraggableScrollView
 import com.subtitleedit.view.DraggableRecyclerView
 import android.widget.Toast
-import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.media.MediaPlayer
@@ -41,14 +35,13 @@ import com.subtitleedit.adapter.SubtitleAdapter
 import com.subtitleedit.adapter.TranslationPreviewAdapter
 import com.subtitleedit.adapter.TranslationPreviewItem
 import com.subtitleedit.databinding.ActivityEditorBinding
+import com.subtitleedit.editor.EditorSearchController
 import com.subtitleedit.util.AiTranslator
 import com.subtitleedit.util.AiProviderConfig
 import com.subtitleedit.view.WaveformTimelineView
 import com.subtitleedit.util.DraftManager
 import com.subtitleedit.util.FileUtils
 import com.subtitleedit.util.CutPasteController
-import com.subtitleedit.util.SearchReplaceEngine
-import com.subtitleedit.util.SearchReplaceOps
 import com.subtitleedit.util.SubtitlePasteOps
 import com.subtitleedit.util.SettingsManager
 import com.subtitleedit.util.WhisperRecognizer
@@ -139,8 +132,7 @@ class EditorActivity : AppCompatActivity() {
     private var pendingTtsTexts: List<String> = emptyList()
     private var ttsGeneration = 0
     
-    // 搜索相关
-    private val searchEngine = SearchReplaceEngine()
+    private lateinit var searchController: EditorSearchController
     
     // 音频文件相关
     private var isAudioFile: Boolean = false
@@ -311,7 +303,7 @@ class EditorActivity : AppCompatActivity() {
         setupToolbar()
         setupRecyclerView()
         setupSourceView()
-        setupSearchBar()
+        setupSearchController()
         setupAudioPlayer()
         initializeMediaPlayer()
         setupBackPressedHandler()
@@ -392,7 +384,7 @@ class EditorActivity : AppCompatActivity() {
                 true
             }
             R.id.menu_search -> {
-                showSearchBar()
+                searchController.show()
                 true
             }
             MENU_SELECT_ALL -> {
@@ -460,434 +452,27 @@ class EditorActivity : AppCompatActivity() {
         })
     }
     
-    private fun setupSearchBar() {
-        // 搜索输入框监听
-        binding.etSearch.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                val query = s?.toString() ?: ""
-                if (query.isNotEmpty() && searchEngine.setQueryIfChanged(query)) {
-                    performSearch()
+    private fun setupSearchController() {
+        searchController = EditorSearchController(
+            context = this,
+            binding = binding,
+            subtitleAdapter = subtitleAdapter,
+            isSourceViewMode = { isSourceViewMode },
+            entries = { subtitleEntries },
+            replaceSourceContent = { content ->
+                binding.etSourceView.setText(content)
+                sourceViewContent = content
+                hasUnsavedChanges = true
+            },
+            applyEntryUpdates = { updates ->
+                updates.forEach { update ->
+                    subtitleEntries.getOrNull(update.index)?.text = update.newText
                 }
-            }
-        })
-        
-        // 上一项按钮
-        binding.btnSearchPrevious.setOnClickListener {
-            goToPreviousResult()
-        }
-        
-        // 下一项按钮
-        binding.btnSearchNext.setOnClickListener {
-            goToNextResult()
-        }
-        
-        // 关闭按钮
-        binding.btnSearchClose.setOnClickListener {
-            hideSearchBar()
-        }
-        
-        // 替换按钮
-        binding.btnReplace.setOnClickListener {
-            replaceOne()
-        }
-        
-        // 全部替换按钮
-        binding.btnReplaceAll.setOnClickListener {
-            replaceAll()
-        }
-        
-        // 回车键搜索
-        binding.etSearch.setOnKeyListener { _, keyCode, event ->
-            if (keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN) {
-                performSearch()
-                true
-            } else {
-                false
-            }
-        }
-    }
-    
-    /**
-     * 显示搜索条
-     */
-    private fun showSearchBar() {
-        binding.searchBar.visibility = android.view.View.VISIBLE
-        binding.etSearch.requestFocus()
-        binding.etSearch.text?.clear()
-        searchEngine.clearResults()
-        // 显示软键盘
-        val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        imm.showSoftInput(binding.etSearch, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
-    }
-    
-    /**
-     * 隐藏搜索条
-     */
-    private fun hideSearchBar() {
-        binding.searchBar.visibility = android.view.View.GONE
-        searchEngine.clearAll()
-        binding.etSearch.text?.clear()
-        binding.etReplace.text?.clear()
-        // 清除列表中的搜索高亮
-        subtitleAdapter.clearSearchHighlight()
-        // 清除源视图中的搜索高亮
-        if (isSourceViewMode) {
-            clearSearchHighlightInSourceView()
-        }
-        // 隐藏软键盘
-        val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        imm.hideSoftInputFromWindow(binding.etSearch.windowToken, 0)
-    }
-    
-    /**
-     * 清除源视图中的搜索高亮
-     */
-    private fun clearSearchHighlightInSourceView() {
-        val content = binding.etSourceView.text?.toString() ?: ""
-        // 恢复原始内容（不带高亮）
-        binding.etSourceView.setText(content, TextView.BufferType.EDITABLE)
-    }
-    
-    /**
-     * 替换一个匹配项
-     */
-    private fun replaceOne() {
-        val replaceText = binding.etReplace.text?.toString() ?: ""
-        if (!searchEngine.hasSearchContext()) {
-            showShortToast("请先搜索内容")
-            return
-        }
-        
-        if (isSourceViewMode) {
-            replaceOneInSourceView(replaceText)
-        } else {
-            replaceOneInRecyclerView(replaceText)
-        }
-    }
-    
-    /**
-     * 在源视图中替换一个匹配项
-     */
-    private fun replaceOneInSourceView(replaceText: String) {
-        val content = binding.etSourceView.text?.toString() ?: ""
-        val position = searchEngine.currentResultPositionOrNull()
-        if (position == null) {
-            showShortToast("没有可替换的匹配项")
-            return
-        }
-
-        val newContent = SearchReplaceOps.replaceInContentAt(
-            content = content,
-            start = position,
-            queryLength = searchEngine.query.length,
-            replacement = replaceText
+                notifyEntriesChanged(updates.map { it.index }, includeNeighbors = false)
+            },
+            confirmReplaceAll = ::showReplaceAllConfirm,
+            showMessage = ::showShortToast
         )
-        if (newContent == null) {
-            showShortToast("没有可替换的匹配项")
-            return
-        }
-        binding.etSourceView.setText(newContent)
-        sourceViewContent = newContent
-        hasUnsavedChanges = true
-        
-        // 重新搜索以更新结果
-        searchInSourceView(preferredResultPosition = position, scrollToCurrent = false)
-        showShortToast("已替换 1 处")
-    }
-    
-    /**
-     * 在列表中替换一个匹配项
-     */
-    private fun replaceOneInRecyclerView(replaceText: String) {
-        val currentIndex = searchEngine.currentIndex
-        val position = searchEngine.currentResultPositionOrNull()
-        if (position == null) {
-            showShortToast("没有可替换的匹配项")
-            return
-        }
-
-        val entry = subtitleEntries[position]
-        val newText = SearchReplaceOps.replaceTextIfChanged(
-            originalText = entry.text,
-            query = searchEngine.query,
-            replacement = replaceText
-        )
-        
-        if (newText != null) {
-            entry.text = newText
-            notifyEntriesChanged(listOf(position), includeNeighbors = false)
-            
-            // 重新搜索以更新结果
-            searchInRecyclerView(
-                preferredResultPosition = position,
-                preferredIndex = currentIndex,
-                scrollToCurrent = false
-            )
-            showShortToast("已替换 1 处")
-        } else {
-            showShortToast("当前项无可替换内容")
-            // 跳转到下一个
-            goToNextResult()
-        }
-    }
-    
-    /**
-     * 全部替换
-     */
-    private fun replaceAll() {
-        val replaceText = binding.etReplace.text?.toString() ?: ""
-        if (searchEngine.query.isEmpty()) {
-            showShortToast("请先搜索内容")
-            return
-        }
-        
-        if (isSourceViewMode) {
-            replaceAllInSourceView(replaceText)
-        } else {
-            replaceAllInRecyclerView(replaceText)
-        }
-    }
-    
-    /**
-     * 在源视图中全部替换
-     */
-    private fun replaceAllInSourceView(replaceText: String) {
-        val content = binding.etSourceView.text?.toString() ?: ""
-        val result = SearchReplaceOps.replaceAllInContent(
-            content = content,
-            query = searchEngine.query,
-            replacement = replaceText
-        )
-        
-        if (result.matchCount > 0) {
-            showReplaceAllConfirm(result.matchCount) {
-                    binding.etSourceView.setText(result.newContent)
-                    sourceViewContent = result.newContent
-                    hasUnsavedChanges = true
-                    clearSearchStateAfterReplace()
-                    showShortToast("已替换 ${result.matchCount} 处")
-            }
-        } else {
-            showShortToast("没有找到可替换的内容")
-        }
-    }
-    
-    /**
-     * 在列表中全部替换
-     */
-    private fun replaceAllInRecyclerView(replaceText: String) {
-        val query = searchEngine.query
-        val updates = SearchReplaceOps.collectTextUpdates(
-            texts = subtitleEntries.map { it.text },
-            query = query,
-            replacement = replaceText
-        )
-        
-        if (updates.isNotEmpty()) {
-            showReplaceAllConfirm(updates.size) {
-                    updates.forEach { update ->
-                        subtitleEntries[update.index].text = update.newText
-                    }
-                    notifyEntriesChanged(updates.map { it.index }, includeNeighbors = false)
-                    clearSearchStateAfterReplace()
-                    showShortToast("已替换 ${updates.size} 处")
-            }
-        } else {
-            showShortToast("没有找到可替换的内容")
-        }
-    }
-    
-    /**
-     * 执行搜索
-     */
-    private fun performSearch() {
-        if (isSourceViewMode) {
-            // 源视图模式下搜索文本内容
-            searchInSourceView()
-        } else {
-            // 列表视图模式下搜索
-            searchInRecyclerView()
-        }
-    }
-    
-    /**
-     * 在源视图中搜索
-     */
-    private fun searchInSourceView(
-        preferredResultPosition: Int? = null,
-        scrollToCurrent: Boolean = true
-    ) {
-        val content = binding.etSourceView.text?.toString() ?: ""
-        if (searchEngine.query.isEmpty() || content.isEmpty()) {
-            searchEngine.clearResults()
-            // 清除高亮
-            val spannable = SpannableString(content)
-            binding.etSourceView.setText(spannable, TextView.BufferType.EDITABLE)
-            return
-        }
-
-        searchEngine.setResults(
-            newResults = searchEngine.findMatchesInText(content),
-            preferredResultValue = preferredResultPosition
-        )
-        updateSearchResultDisplay()
-        highlightSearchInSourceView(scrollToCurrent)
-    }
-    
-    /**
-     * 在源视图中高亮搜索结果
-     */
-    private fun highlightSearchInSourceView(scrollToCurrent: Boolean = true) {
-        val content = binding.etSourceView.text?.toString() ?: ""
-        val query = searchEngine.query
-        val results = searchEngine.results
-        if (query.isEmpty() || results.isEmpty()) return
-        
-        val spannable = SpannableString(content)
-        val highlightColor = ContextCompat.getColor(this, R.color.inverse_primary)
-        
-        // 高亮所有搜索结果
-        results.forEach { startIndex ->
-            val endIndex = (startIndex + query.length).coerceAtMost(content.length)
-            spannable.setSpan(
-                BackgroundColorSpan(highlightColor),
-                startIndex,
-                endIndex,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-            spannable.setSpan(
-                StyleSpan(Typeface.BOLD),
-                startIndex,
-                endIndex,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-        }
-        
-        // 高亮当前选中的结果（使用不同颜色）
-        if (searchEngine.currentIndex in results.indices) {
-            val currentIndex = results[searchEngine.currentIndex]
-            val endIndex = (currentIndex + query.length).coerceAtMost(content.length)
-            // 当前结果使用更亮的颜色
-            spannable.setSpan(
-                BackgroundColorSpan(ContextCompat.getColor(this, R.color.secondary)),
-                currentIndex,
-                endIndex,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-        }
-        
-        binding.etSourceView.setText(spannable, TextView.BufferType.EDITABLE)
-        
-        // 滚动到当前结果
-        if (scrollToCurrent && searchEngine.currentIndex in results.indices) {
-            val position = results[searchEngine.currentIndex]
-            scrollSourceViewToOffset(position)
-        }
-    }
-
-    private fun scrollSourceViewToOffset(offset: Int) {
-        val contentLength = binding.etSourceView.text?.length ?: 0
-        if (offset < 0 || offset > contentLength) return
-        binding.etSourceView.post {
-            val layout = binding.etSourceView.layout ?: return@post
-            val line = layout.getLineForOffset(offset.coerceAtMost(contentLength))
-            val lineTop = layout.getLineTop(line)
-            val viewportHeight = binding.svSourceView.height
-            val targetY = (lineTop - viewportHeight / 3).coerceAtLeast(0)
-            binding.svSourceView.smoothScrollTo(0, targetY)
-        }
-    }
-    
-    /**
-     * 在列表中搜索（搜索字幕文本和时间）
-     */
-    private fun searchInRecyclerView(
-        preferredResultPosition: Int? = null,
-        preferredIndex: Int? = null,
-        scrollToCurrent: Boolean = true
-    ) {
-        val query = searchEngine.query
-        if (query.isEmpty()) {
-            searchEngine.clearResults()
-            return
-        }
-        
-        val results = subtitleEntries.mapIndexedNotNull { index, entry ->
-            // 搜索文本内容
-            if (entry.text.contains(query, ignoreCase = true)) {
-                index
-            } else {
-                // 搜索时间（格式化为字符串后搜索）
-                val timeStr = TimeUtils.formatForDisplay(entry.startTime)
-                if (timeStr.contains(query, ignoreCase = true)) {
-                    index
-                } else {
-                    null
-                }
-            }
-        }
-
-        searchEngine.setResults(
-            newResults = results,
-            preferredResultValue = preferredResultPosition,
-            preferredIndex = preferredIndex
-        )
-        updateSearchResultDisplay()
-        
-        // 跳转到当前结果
-        if (scrollToCurrent && searchEngine.currentIndex in searchEngine.results.indices) {
-            scrollToSearchResult(searchEngine.currentIndex)
-        }
-    }
-    
-    /**
-     * 更新搜索结果显示
-     */
-    private fun updateSearchResultDisplay() {
-        if (searchEngine.results.isEmpty()) {
-            com.subtitleedit.util.OverwritingToast.makeText(this, getString(R.string.search_no_results), Toast.LENGTH_SHORT).show()
-        } else {
-            val message = getString(R.string.search_result_count, searchEngine.results.size, searchEngine.currentIndex + 1)
-            com.subtitleedit.util.OverwritingToast.makeText(this, message, Toast.LENGTH_SHORT).show()
-        }
-    }
-    
-    /**
-     * 滚动到搜索结果位置
-     */
-    private fun scrollToSearchResult(index: Int) {
-        if (index !in searchEngine.results.indices) return
-
-        val position = searchEngine.results[index]
-        if (isSourceViewMode) {
-            // 源视图模式：重新高亮并滚动
-            highlightSearchInSourceView()
-        } else {
-            // 列表模式：滚动 RecyclerView
-            binding.rvSubtitles.scrollToPosition(position)
-            // 高亮显示（通过 adapter）
-            subtitleAdapter.highlightSearchResult(position, searchEngine.query)
-        }
-    }
-    
-    /**
-     * 跳转到上一个搜索结果
-     */
-    private fun goToPreviousResult() {
-        val index = searchEngine.moveToPrevious() ?: return
-        updateSearchResultDisplay()
-        scrollToSearchResult(index)
-    }
-    
-    /**
-     * 跳转到下一个搜索结果
-     */
-    private fun goToNextResult() {
-        val index = searchEngine.moveToNext() ?: return
-        updateSearchResultDisplay()
-        scrollToSearchResult(index)
     }
     
     private fun updateSelectedCountDisplay() {
@@ -1016,6 +601,7 @@ class EditorActivity : AppCompatActivity() {
      */
     private fun enterSourceViewMode() {
         isSourceViewMode = true
+        if (::searchController.isInitialized) searchController.onEditorModeChanged()
         
         // 保存 RecyclerView 的滚动位置
         val layoutManager = binding.rvSubtitles.layoutManager as LinearLayoutManager
@@ -1059,6 +645,7 @@ class EditorActivity : AppCompatActivity() {
      */
     private fun exitSourceViewMode() {
         isSourceViewMode = false
+        if (::searchController.isInitialized) searchController.onEditorModeChanged()
         
         // 保存 ScrollView 的滚动位置
         savedScrollPosition = binding.svSourceView.scrollY
@@ -1646,6 +1233,7 @@ class EditorActivity : AppCompatActivity() {
         }
         if (syncWaveform) syncWaveformSubtitles()
         if (markChanged) markAsChanged()
+        if (::searchController.isInitialized) searchController.onDocumentChanged()
     }
 
     private fun notifyPositionsWithNeighbors(positions: List<Int>) {
@@ -1701,6 +1289,7 @@ class EditorActivity : AppCompatActivity() {
         if (updateFormat) updateFormatInfo()
         if (syncWaveform) syncWaveformSubtitles()
         if (markChanged) markAsChanged()
+        if (::searchController.isInitialized) searchController.onDocumentChanged()
     }
     
     private fun newFile() {
@@ -2602,11 +2191,6 @@ class EditorActivity : AppCompatActivity() {
             message = message,
             onConfirm = onConfirm
         )
-    }
-
-    private fun clearSearchStateAfterReplace() {
-        searchEngine.clearAll()
-        binding.etSearch.text?.clear()
     }
 
     private fun getCurrentSubtitleFile(): File? {
