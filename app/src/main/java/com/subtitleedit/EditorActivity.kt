@@ -11,16 +11,12 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
-import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
-import android.widget.ArrayAdapter
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.subtitleedit.view.DraggableScrollView
-import com.subtitleedit.view.DraggableRecyclerView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
@@ -28,23 +24,22 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import android.speech.tts.TextToSpeech
 import com.subtitleedit.adapter.SubtitleAdapter
-import com.subtitleedit.adapter.TranslationPreviewAdapter
 import com.subtitleedit.adapter.TranslationPreviewItem
 import com.subtitleedit.databinding.ActivityEditorBinding
 import com.subtitleedit.editor.EditorAudioFilePreparer
 import com.subtitleedit.editor.EditorPlaybackController
 import com.subtitleedit.editor.EditorSearchController
+import com.subtitleedit.editor.EditorTextPreviewDialog
+import com.subtitleedit.editor.EditorTranscribeController
+import com.subtitleedit.editor.EditorTranslationController
+import com.subtitleedit.editor.EditorTtsController
 import com.subtitleedit.editor.EditorWaveformController
-import com.subtitleedit.util.AiTranslator
-import com.subtitleedit.util.AiProviderConfig
 import com.subtitleedit.util.DraftManager
 import com.subtitleedit.util.FileUtils
 import com.subtitleedit.util.CutPasteController
 import com.subtitleedit.util.SubtitlePasteOps
 import com.subtitleedit.util.SettingsManager
-import com.subtitleedit.util.WhisperRecognizer
 import com.subtitleedit.util.SubtitleEntryOps
 import com.subtitleedit.model.SubtitleEntry
 import com.subtitleedit.util.SubtitleParser
@@ -52,14 +47,7 @@ import com.subtitleedit.util.TimeUtils
 import java.io.File
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
-import java.util.Locale
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import com.arthenica.ffmpegkit.FFmpegKit
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 
@@ -111,26 +99,11 @@ class EditorActivity : AppCompatActivity() {
     private var clipboardTexts: List<String> = emptyList()
     private val cutPasteController = CutPasteController()
     
-    // 翻译相关
-    private var translateJob: Job? = null
-    private var isTranslating = false
-    private var translateCancelled = false
-    private var activeAiTranslator: AiTranslator? = null
+    // AI 翻译 / 快速转录 / 快速 TTS
+    private lateinit var translationController: EditorTranslationController
+    private lateinit var transcribeController: EditorTranscribeController
+    private lateinit var ttsController: EditorTtsController
 
-    // 快速转录相关
-    private var transcribeJob: Job? = null
-    private var transcribeCancelled = false
-
-    // 快速 TTS 相关
-    private var textToSpeech: TextToSpeech? = null
-    private var ttsReady = false
-    private var ttsInitializing = false
-    private var activeTtsEnginePreference: String? = null
-    private var activeTtsLanguagePreference: String? = null
-    private var ttsDefaultLocale: Locale? = null
-    private var pendingTtsTexts: List<String> = emptyList()
-    private var ttsGeneration = 0
-    
     private lateinit var searchController: EditorSearchController
     
     // 音频文件相关
@@ -203,6 +176,7 @@ class EditorActivity : AppCompatActivity() {
         setupSearchController()
         setupPlaybackController()
         setupWaveformController()
+        setupAiControllers()
         setupAudioActions()
         setupBackPressedHandler()
         
@@ -416,7 +390,32 @@ class EditorActivity : AppCompatActivity() {
         )
         waveformController.bind()
     }
-    
+
+    private fun setupAiControllers() {
+        val previewDialog = EditorTextPreviewDialog(this)
+        translationController = EditorTranslationController(
+            activity = this,
+            scope = lifecycleScope,
+            previewDialog = previewDialog,
+            applyTexts = { appliedItems -> applyPreviewTexts(appliedItems, "翻译") },
+            saveDraft = ::saveTranslationDraft,
+            showMessage = ::showShortToast
+        )
+        transcribeController = EditorTranscribeController(
+            activity = this,
+            scope = lifecycleScope,
+            cacheDir = cacheDir,
+            previewDialog = previewDialog,
+            applyTexts = { appliedItems -> applyPreviewTexts(appliedItems, "转录") },
+            showMessage = ::showShortToast
+        )
+        ttsController = EditorTtsController(
+            activity = this,
+            rootView = binding.root,
+            showMessage = ::showShortToast
+        )
+    }
+
     private fun updateSelectedCountDisplay() {
         val count = subtitleAdapter.getSelectedCount()
         if (count > 0) {
@@ -1547,178 +1546,30 @@ class EditorActivity : AppCompatActivity() {
      */
     private fun showAiTranslate() {
         if (!ensureListMode()) return
-        
         val selectedEntries = requireSelectedEntries("请先选择要翻译的字幕") ?: return
-        
-        // 检查 API 设置
-        val settingsManager = SettingsManager.getInstance(this)
-        val provider = settingsManager.getAiProvider()
-        val providerName = AiProviderConfig.getProvider(provider).displayName
-        val apiKey = settingsManager.getAiApiKey()
-        if (apiKey.isEmpty()) {
-            com.subtitleedit.util.OverwritingToast.makeText(this, "请先在设置中配置 $providerName API Key", Toast.LENGTH_LONG).show()
-            return
-        }
-        
-        val model = settingsManager.getAiModel()
-        val sourceLanguage = settingsManager.getAiSourceLanguage()
-        val targetLanguage = settingsManager.getAiTargetLanguage()
-        val customPrompt = settingsManager.getAiTranslationPrompt()
-        
-        // 显示翻译确认对话框
-        val sourceLangText = if (sourceLanguage == "自动检测") "自动检测" else sourceLanguage
-        AlertDialog.Builder(this)
-            .setTitle("AI 翻译")
-            .setMessage("将使用 $providerName / $model 翻译选中的 ${selectedEntries.size} 条字幕\n源语言：$sourceLangText\n目标语言：$targetLanguage\n\n点击「开始翻译」继续")
-            .setPositiveButton("开始翻译") { _, _ ->
-                startTranslation(selectedEntries, provider, apiKey, model, sourceLanguage, targetLanguage, customPrompt)
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-    
-    /**
-     * 开始翻译
-     */
-    private fun startTranslation(
-        selectedEntries: List<Pair<SubtitleEntry, Int>>,
-        provider: String,
-        apiKey: String,
-        model: String,
-        sourceLanguage: String,
-        targetLanguage: String,
-        customPrompt: String
-    ) {
-        // 显示翻译进度对话框
-        val progressDialog = AlertDialog.Builder(this)
-            .setTitle("正在翻译")
-            .setMessage("正在翻译第 0/${selectedEntries.size} 条...")
-            .setNegativeButton("取消") { _, _ ->
-                translateCancelled = true
-                activeAiTranslator?.cancel()
-            }
-            .setCancelable(false)
-            .create()
-        progressDialog.show()
-        
-        translateCancelled = false
-        isTranslating = true
-        
-        val aiTranslator = AiTranslator(provider, apiKey, model, sourceLanguage, targetLanguage, customPrompt)
-        activeAiTranslator = aiTranslator
-        val textsToTranslate = selectedEntries.map { it.first.text }
-        
-        translateJob = CoroutineScope(Dispatchers.Main).launch {
-            try {
-                val result = aiTranslator.translateTexts(
-                    texts = textsToTranslate,
-                    progressCallback = { current, total ->
-                        runOnUiThread {
-                            progressDialog.setMessage("正在翻译第 $current/$total 条...")
-                        }
-                    },
-                    isCancelled = { translateCancelled }
-                )
-                
-                finishTranslation(progressDialog)
-                
-                if (result.isSuccess) {
-                    val translatedTexts = result.getOrNull() ?: emptyList()
-                    showTranslationResult(selectedEntries, translatedTexts)
-                } else {
-                    val errorMessage = result.exceptionOrNull()?.message ?: "未知错误"
-                    showTranslationError(errorMessage)
-                }
-            } catch (e: Exception) {
-                finishTranslation(progressDialog)
-                showTranslationError(e.message ?: "未知错误")
-            }
-        }
-    }
-    
-    /**
-     * 显示翻译结果预览
-     */
-    private fun showTranslationResult(
-        selectedEntries: List<Pair<SubtitleEntry, Int>>,
-        translatedTexts: List<String>
-    ) {
-        if (translatedTexts.size != selectedEntries.size) {
-            showShortToast("翻译结果数量不匹配")
-            return
-        }
-        
-        val previewItems = selectedEntries.mapIndexed { index, (entry, position) ->
-            TranslationPreviewItem(position, entry.text, translatedTexts[index])
-        }
-        val recyclerView = DraggableRecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@EditorActivity)
-            adapter = TranslationPreviewAdapter(previewItems) { item, onUpdated ->
-                showTranslationTextEditDialog(item, onUpdated)
-            }
-            setPadding(16, 8, 16, 8)
-            clipToPadding = false
-            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
-            post { showDragThumb() }
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("翻译结果预览")
-            .setView(recyclerView)
-            .setPositiveButton("应用") { _, _ ->
-                val appliedItems = previewItems.filter { it.apply }
-                appliedItems.forEach { item ->
-                    subtitleEntries.getOrNull(item.entryPosition)?.text = item.translatedText
-                }
-                if (appliedItems.isNotEmpty()) {
-                    notifyEntriesChanged(appliedItems.map { it.entryPosition }, includeNeighbors = false)
-                }
-                showShortToast("已应用 ${appliedItems.size} 条翻译")
-            }
-            .setNeutralButton("保存草稿") { _, _ -> saveTranslationDraft(previewItems) }
-            .setNegativeButton("取消", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.window?.apply {
-                setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-                setLayout(
-                (resources.displayMetrics.widthPixels * 0.96f).toInt(),
-                (resources.displayMetrics.heightPixels * 0.82f).toInt()
-                )
-            }
-        }
-        dialog.show()
+        translationController.start(selectedEntries)
     }
 
-    private fun showTranslationTextEditDialog(
-        previewItem: TranslationPreviewItem,
-        onUpdated: () -> Unit,
-        title: String = "编辑翻译文本"
-    ) {
-        val editText = EditText(this).apply {
-            setText(previewItem.translatedText)
-            setSelection(text.length)
-            setLines(3)
-            inputType = EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE
-            importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
+    /** 对当前选中的字幕行按各自时间范围执行离线语音转录。 */
+    private fun showQuickTranscribe() {
+        if (!ensureListMode()) return
+        val audioFile = currentFile?.takeIf { isAudioFile } ?: run {
+            showShortToast("仅在打开音频文件时可快速转录")
+            return
         }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(title)
-            .setView(editText)
-            .setPositiveButton("确定") { _, _ ->
-                previewItem.translatedText = editText.text?.toString().orEmpty()
-                onUpdated()
-            }
-            .setNegativeButton("取消", null)
-            .create()
-        dialog.setOnShowListener {
-            editText.requestFocus()
-            dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
-            editText.post {
-                val inputMethodManager = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-                inputMethodManager.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT)
-            }
+        val selectedEntries = requireSelectedEntries("请先选择要转录的字幕") ?: return
+        transcribeController.start(selectedEntries, audioFile)
+    }
+
+    /** 把预览对话框中勾选应用的文本写回字幕列表。 */
+    private fun applyPreviewTexts(appliedItems: List<TranslationPreviewItem>, actionName: String) {
+        appliedItems.forEach { item ->
+            subtitleEntries.getOrNull(item.entryPosition)?.text = item.translatedText
         }
-        dialog.show()
+        if (appliedItems.isNotEmpty()) {
+            notifyEntriesChanged(appliedItems.map { it.entryPosition }, includeNeighbors = false)
+        }
+        showShortToast("已应用 ${appliedItems.size} 条$actionName")
     }
 
     private fun saveTranslationDraft(previewItems: List<TranslationPreviewItem>) {
@@ -1730,254 +1581,6 @@ class EditorActivity : AppCompatActivity() {
         val draftContent = serializeEntriesForFormat(currentFormat, draftEntries)
         val savedFileName = DraftManager.saveDraft(this, fileName, draftContent)
         showShortToast("翻译草稿已保存：$savedFileName")
-    }
-
-    private fun finishTranslation(progressDialog: AlertDialog) {
-        if (progressDialog.isShowing) {
-            progressDialog.dismiss()
-        }
-        isTranslating = false
-        translateJob = null
-        activeAiTranslator = null
-    }
-
-    private fun showTranslationError(message: String) {
-        com.subtitleedit.util.OverwritingToast.makeText(this, "翻译失败：$message", Toast.LENGTH_LONG).show()
-    }
-
-    /** 对当前选中的字幕行按各自时间范围执行离线语音转录。 */
-    private fun showQuickTranscribe() {
-        if (!ensureListMode()) return
-        if (!isAudioFile || currentFile == null) {
-            showShortToast("仅在打开音频文件时可快速转录")
-            return
-        }
-        val selectedEntries = requireSelectedEntries("请先选择要转录的字幕") ?: return
-        if (selectedEntries.any { it.first.endTime <= it.first.startTime }) {
-            showShortToast("选中的字幕包含无效时间范围")
-            return
-        }
-
-        val settings = SettingsManager.getInstance(this)
-        val modelType = settings.getAsrModelType()
-        val sourceLanguage = settings.getQuickTranscribeSourceLanguage()
-        val encoderPath: String
-        val decoderPath: String
-        val tokensPath: String
-        if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-            encoderPath = settings.getSenseVoiceModelPath()
-            decoderPath = ""
-            tokensPath = settings.getSenseVoiceTokensPath()
-        } else {
-            encoderPath = settings.getWhisperEncoderPath()
-            decoderPath = settings.getWhisperDecoderPath()
-            tokensPath = settings.getWhisperTokensPath()
-        }
-        if (encoderPath.isBlank() || tokensPath.isBlank() ||
-            (modelType == SettingsManager.ASR_MODEL_WHISPER && decoderPath.isBlank())
-        ) {
-            showShortToast("请先在语音转字幕配置中设置识别模型")
-            return
-        }
-
-        val (dialogView, languageSpinner) =
-            createQuickTranscribeLanguageView(selectedEntries.size, sourceLanguage)
-        AlertDialog.Builder(this)
-            .setTitle("快速转录")
-            .setView(dialogView)
-            .setPositiveButton("开始转录") { _, _ ->
-                val selectedLanguage = SettingsManager.TRANSCRIPTION_LANGUAGE_OPTIONS[
-                    languageSpinner.selectedItemPosition.coerceIn(
-                        0,
-                        SettingsManager.TRANSCRIPTION_LANGUAGE_OPTIONS.lastIndex
-                    )
-                ]
-                settings.setQuickTranscribeSourceLanguage(selectedLanguage)
-                startQuickTranscription(
-                    selectedEntries,
-                    encoderPath,
-                    decoderPath,
-                    tokensPath,
-                    modelType,
-                    selectedLanguage
-                )
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun createQuickTranscribeLanguageView(
-        selectedCount: Int,
-        sourceLanguage: String
-    ): Pair<LinearLayout, android.widget.Spinner> {
-        val horizontalPadding = (16 * resources.displayMetrics.density).toInt()
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(horizontalPadding, 0, horizontalPadding, 0)
-        }
-        val summary = TextView(this).apply {
-            text = "将识别选中的 $selectedCount 条字幕对应音频，并在预览中确认后应用。"
-            textSize = 14f
-        }
-        val label = TextView(this).apply {
-            text = "源语言"
-            textSize = 14f
-            setPadding(0, 24, 0, 0)
-        }
-        val spinner = android.widget.Spinner(this).apply {
-            val adapter = ArrayAdapter(
-                this@EditorActivity,
-                android.R.layout.simple_spinner_item,
-                SettingsManager.TRANSCRIPTION_LANGUAGE_OPTIONS
-            )
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            this.adapter = adapter
-            setSelection(
-                SettingsManager.TRANSCRIPTION_LANGUAGE_OPTIONS.indexOf(sourceLanguage).coerceAtLeast(0)
-            )
-        }
-        container.addView(summary)
-        container.addView(label)
-        container.addView(spinner)
-        return container to spinner
-    }
-
-    private fun startQuickTranscription(
-        selectedEntries: List<Pair<SubtitleEntry, Int>>,
-        encoderPath: String,
-        decoderPath: String,
-        tokensPath: String,
-        modelType: String,
-        sourceLanguage: String
-    ) {
-        val inputFile = currentFile ?: return
-        val progressDialog = AlertDialog.Builder(this)
-            .setTitle("正在转录")
-            .setMessage("正在准备音频...")
-            .setNegativeButton("取消") { _, _ -> transcribeCancelled = true }
-            .setCancelable(false)
-            .create()
-        progressDialog.show()
-        transcribeCancelled = false
-
-        transcribeJob = lifecycleScope.launch {
-            try {
-                val cachedPcmFile = recognitionPcmCacheFile(inputFile)
-                progressDialog.setMessage(
-                    if (isRecognitionPcmCacheValid(cachedPcmFile)) "正在使用缓存音频..." else "正在准备音频..."
-                )
-                val pcmFile = withContext(Dispatchers.IO) { convertAudioToRecognitionPcm(inputFile) }
-                    ?: throw IllegalStateException("音频转换失败")
-                if (transcribeCancelled) return@launch
-
-                val recognizer = WhisperRecognizer(
-                    encoderPath = encoderPath,
-                    decoderPath = decoderPath,
-                    tokensPath = tokensPath,
-                    useVad = false,
-                    language = sourceLanguage,
-                    contentResolver = contentResolver,
-                    context = this@EditorActivity,
-                    modelType = modelType
-                )
-                val ranges = selectedEntries.map { it.first.startTime..it.first.endTime }
-                val result = withContext(Dispatchers.IO) {
-                    recognizer.recognizeRanges(
-                        audioFile = pcmFile,
-                        ranges = ranges,
-                        progressCallback = { current, total ->
-                            runOnUiThread {
-                                progressDialog.setMessage("正在转录第 $current/$total 条...")
-                            }
-                        },
-                        isCancelled = { transcribeCancelled }
-                    )
-                }
-                if (transcribeCancelled) return@launch
-
-                progressDialog.dismiss()
-                result.onSuccess { texts -> showTranscriptionResult(selectedEntries, texts) }
-                    .onFailure { showShortToast("转录失败：${it.message ?: "未知错误"}") }
-            } catch (e: Exception) {
-                if (!transcribeCancelled) showShortToast("转录失败：${e.message ?: "未知错误"}")
-            } finally {
-                if (progressDialog.isShowing) progressDialog.dismiss()
-                transcribeJob = null
-            }
-        }
-    }
-
-    /**
-     * 缓存键包含源文件元数据。源文件变化时会自然切换到新的缓存，不会读取旧音频。
-     */
-    private fun recognitionPcmCacheFile(inputFile: File): File {
-        val sourceKey = "${inputFile.absolutePath.hashCode().toUInt().toString(16)}_" +
-            "${inputFile.length()}_${inputFile.lastModified()}"
-        return File(cacheDir, "quick_transcribe_${sourceKey}_16k.wav")
-    }
-
-    private fun isRecognitionPcmCacheValid(file: File): Boolean = file.exists() && file.length() > 44L
-
-    private fun convertAudioToRecognitionPcm(inputFile: File): File? {
-        return try {
-            val outputFile = recognitionPcmCacheFile(inputFile)
-            if (isRecognitionPcmCacheValid(outputFile)) return outputFile
-            if (outputFile.exists()) outputFile.delete()
-            val command = "-y -i \"${inputFile.absolutePath}\" -ar 16000 -ac 1 -c:a pcm_s16le \"${outputFile.absolutePath}\""
-            val session = FFmpegKit.execute(command)
-            outputFile.takeIf { session.getReturnCode()?.isValueSuccess() == true && isRecognitionPcmCacheValid(it) }
-        } catch (e: Exception) {
-            android.util.Log.e("EditorActivity", "快速转录音频转换失败", e)
-            null
-        }
-    }
-
-    private fun showTranscriptionResult(
-        selectedEntries: List<Pair<SubtitleEntry, Int>>,
-        transcribedTexts: List<String>
-    ) {
-        if (transcribedTexts.size != selectedEntries.size) {
-            showShortToast("转录结果数量不匹配")
-            return
-        }
-        val previewItems = selectedEntries.mapIndexed { index, (entry, position) ->
-            TranslationPreviewItem(position, entry.text, transcribedTexts[index])
-        }
-        val recyclerView = DraggableRecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@EditorActivity)
-            adapter = TranslationPreviewAdapter(previewItems) { item, onUpdated ->
-                showTranslationTextEditDialog(item, onUpdated, "编辑转录文本")
-            }
-            setPadding(16, 8, 16, 8)
-            clipToPadding = false
-            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
-            post { showDragThumb() }
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("转录结果预览")
-            .setView(recyclerView)
-            .setPositiveButton("应用") { _, _ ->
-                val appliedItems = previewItems.filter { it.apply }
-                appliedItems.forEach { item ->
-                    subtitleEntries.getOrNull(item.entryPosition)?.text = item.translatedText
-                }
-                if (appliedItems.isNotEmpty()) {
-                    notifyEntriesChanged(appliedItems.map { it.entryPosition }, includeNeighbors = false)
-                }
-                showShortToast("已应用 ${appliedItems.size} 条转录")
-            }
-            .setNegativeButton("取消", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.window?.apply {
-                setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-                setLayout(
-                    (resources.displayMetrics.widthPixels * 0.96f).toInt(),
-                    (resources.displayMetrics.heightPixels * 0.82f).toInt()
-                )
-            }
-        }
-        dialog.show()
     }
     
     private fun renumberEntries(force: Boolean = false) {
@@ -2201,22 +1804,13 @@ class EditorActivity : AppCompatActivity() {
     }
     
     override fun onDestroy() {
-        ttsGeneration++
-        pendingTtsTexts = emptyList()
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
-        textToSpeech = null
+        ttsController.release()
         super.onDestroy()
         audioFilePreparer.release()
         playbackController.release()
         waveformController.release()
-        if (isTranslating) {
-            translateCancelled = true
-            activeAiTranslator?.cancel()
-            translateJob?.cancel()
-        }
-        transcribeCancelled = true
-        transcribeJob?.cancel()
+        translationController.release()
+        transcribeController.release()
     }
     
     // ==================== 音频播放器相关方法 ====================
@@ -2250,141 +1844,7 @@ class EditorActivity : AppCompatActivity() {
             showShortToast("选中的字幕没有可朗读文本")
             return
         }
-
-        val settings = SettingsManager.getInstance(this)
-        val requestedEngine = settings.getTtsEngine()
-        val requestedLanguage = settings.getTtsLanguage()
-        if (ttsReady && activeTtsEnginePreference == requestedEngine &&
-            activeTtsLanguagePreference == requestedLanguage
-        ) {
-            speakSubtitleTexts(texts, requestedLanguage)
-            return
-        }
-
-        pendingTtsTexts = texts
-        if (ttsInitializing && activeTtsEnginePreference == requestedEngine &&
-            activeTtsLanguagePreference == requestedLanguage
-        ) return
-        initializeTts(requestedEngine, requestedLanguage)
-    }
-
-    private fun initializeTts(requestedEngine: String, requestedLanguage: String) {
-        if (requestedEngine.isNotBlank() && !isTtsEngineInstalled(requestedEngine)) {
-            ttsGeneration++
-            pendingTtsTexts = emptyList()
-            textToSpeech?.shutdown()
-            textToSpeech = null
-            ttsReady = false
-            ttsInitializing = false
-            activeTtsEnginePreference = null
-            activeTtsLanguagePreference = null
-            showShortToast("所选 TTS 引擎已不可用，请在设置中重新选择")
-            return
-        }
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
-        textToSpeech = null
-        ttsReady = false
-        ttsInitializing = true
-        activeTtsEnginePreference = requestedEngine
-        activeTtsLanguagePreference = requestedLanguage
-        ttsDefaultLocale = null
-        val generation = ++ttsGeneration
-
-        val listener = TextToSpeech.OnInitListener { status ->
-            // post 确保构造函数已返回且 textToSpeech 字段已经完成赋值。
-            binding.root.post {
-                if (generation != ttsGeneration || isDestroyed) return@post
-                ttsInitializing = false
-                // defaultEngine 表示系统默认引擎，并不表示构造函数指定的当前引擎。
-                if (status == TextToSpeech.SUCCESS) {
-                    ttsReady = true
-                    ttsDefaultLocale = textToSpeech?.voice?.locale
-                    val texts = pendingTtsTexts
-                    pendingTtsTexts = emptyList()
-                    speakSubtitleTexts(texts, requestedLanguage)
-                } else {
-                    pendingTtsTexts = emptyList()
-                    textToSpeech?.shutdown()
-                    textToSpeech = null
-                    activeTtsEnginePreference = null
-                    activeTtsLanguagePreference = null
-                    showShortToast(
-                        if (requestedEngine.isBlank()) "系统默认 TTS 引擎初始化失败"
-                        else "所选 TTS 引擎不可用，请在设置中重新选择"
-                    )
-                }
-            }
-        }
-
-        textToSpeech = if (requestedEngine.isBlank()) {
-            TextToSpeech(this, listener)
-        } else {
-            TextToSpeech(this, listener, requestedEngine)
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun isTtsEngineInstalled(packageName: String): Boolean {
-        return packageManager.queryIntentServices(
-            Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE),
-            android.content.pm.PackageManager.MATCH_ALL
-        ).any { it.serviceInfo?.packageName == packageName }
-    }
-
-    private fun speakSubtitleTexts(texts: List<String>, languagePreference: String) {
-        val tts = textToSpeech ?: return
-        val maxLength = TextToSpeech.getMaxSpeechInputLength().coerceAtLeast(1)
-
-        tts.stop()
-        val utterancePrefix = "quick_tts_${System.currentTimeMillis()}"
-        var utteranceIndex = 0
-        texts.forEach { subtitleText ->
-            val locale = resolveTtsLocale(subtitleText, languagePreference) ?: ttsDefaultLocale
-            if (locale != null) {
-                val availability = tts.setLanguage(locale)
-                if (availability == TextToSpeech.LANG_MISSING_DATA ||
-                    availability == TextToSpeech.LANG_NOT_SUPPORTED
-                ) {
-                    showShortToast("所选 TTS 引擎不支持 ${locale.displayLanguage}，请安装对应语音包")
-                    tts.stop()
-                    return
-                }
-            }
-
-            subtitleText.chunked(maxLength).forEach { chunk ->
-                val result = tts.speak(
-                    chunk,
-                    if (utteranceIndex == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
-                    null,
-                    "${utterancePrefix}_${utteranceIndex++}"
-                )
-                if (result == TextToSpeech.ERROR) {
-                    showShortToast("TTS 朗读启动失败")
-                    tts.stop()
-                    return
-                }
-            }
-        }
-    }
-
-    private fun resolveTtsLocale(text: String, preference: String): Locale? {
-        return when (preference) {
-            SettingsManager.TTS_LANGUAGE_JAPANESE -> Locale.JAPAN
-            SettingsManager.TTS_LANGUAGE_CHINESE -> Locale.SIMPLIFIED_CHINESE
-            SettingsManager.TTS_LANGUAGE_ENGLISH -> Locale.US
-            SettingsManager.TTS_LANGUAGE_AUTO -> when {
-                // 假名可以可靠地区分日语；纯汉字在中日文之间本身具有歧义。
-                text.any { it in '\u3040'..'\u30ff' || it in '\uff66'..'\uff9f' } -> Locale.JAPAN
-                text.any { it in '\u3400'..'\u9fff' } -> {
-                    if (Locale.getDefault().language == Locale.JAPANESE.language) Locale.JAPAN
-                    else Locale.SIMPLIFIED_CHINESE
-                }
-                text.any { it in 'A'..'Z' || it in 'a'..'z' } -> Locale.US
-                else -> null
-            }
-            else -> null
-        }
+        ttsController.speak(texts)
     }
 
     /**
