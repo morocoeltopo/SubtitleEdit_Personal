@@ -17,6 +17,17 @@ import com.subtitleedit.util.TimeUtils
 import java.io.File
 import java.util.Locale
 
+internal enum class PlaybackPhase {
+    IDLE,
+    LOADING,
+    READY,
+    ERROR,
+    RELEASED;
+
+    val canAccessPlayer: Boolean
+        get() = this == READY
+}
+
 internal class EditorPlaybackController(
     private val context: Context,
     private val binding: ActivityEditorBinding,
@@ -37,6 +48,7 @@ internal class EditorPlaybackController(
     private var isUserSeeking = false
     private var playbackSpeed = 1.0f
     private var mediaPlayer: MediaPlayer? = null
+    private var playbackPhase = PlaybackPhase.IDLE
     private var limitedPlaybackEntry: SubtitleEntry? = null
     private var isLimitedRangePlaybackActive = false
 
@@ -52,6 +64,7 @@ internal class EditorPlaybackController(
     private fun onProgressFrame() {
         progressScheduled = false
         val player = mediaPlayer ?: return
+        if (!playbackPhase.canAccessPlayer) return
         if (!player.isPlaying) return
         isPlaying = true
         renderPlayPauseIcon()
@@ -102,31 +115,47 @@ internal class EditorPlaybackController(
                 updatePlayerUi()
             }
             setOnErrorListener { _, what, extra ->
+                playbackPhase = PlaybackPhase.ERROR
                 showMessage("播放错误：$what, $extra")
                 this@EditorPlaybackController.isPlaying = false
-                updatePlayerUi()
+                stopProgressUpdate()
+                renderPlayPauseIcon()
+                renderProgress(currentPositionMs)
                 true
             }
         }
+        playbackPhase = PlaybackPhase.IDLE
 
         audioFileName()?.let { binding.tvAudioFileName.text = it }
         bindTimelinePlaybackCallbacks()
         bindPlayerControls()
-        updatePlayerUi()
+        renderPlayPauseIcon()
+        renderTotalTime()
+        renderProgress(currentPositionMs)
     }
 
     fun prepare(audioFile: File) {
-        mediaPlayer?.reset()
-        mediaPlayer?.setDataSource(audioFile.absolutePath)
-        mediaPlayer?.prepare()
-        durationMs = mediaPlayer?.duration?.toLong() ?: 0L
-        if (playbackSpeed != 1.0f) {
-            mediaPlayer?.playbackParams = PlaybackParams().setSpeed(playbackSpeed)
+        val player = mediaPlayer ?: return
+        playbackPhase = PlaybackPhase.LOADING
+        try {
+            player.reset()
+            player.setDataSource(audioFile.absolutePath)
+            player.prepare()
+            playbackPhase = PlaybackPhase.READY
+            durationMs = player.duration.toLong()
+            currentPositionMs = 0L
+            if (playbackSpeed != 1.0f) {
+                player.playbackParams = PlaybackParams().setSpeed(playbackSpeed)
+            }
+            updatePlayerUi()
+        } catch (error: Exception) {
+            playbackPhase = PlaybackPhase.ERROR
+            throw error
         }
-        updatePlayerUi()
     }
 
     fun seekTo(timeMs: Long) {
+        if (!playbackPhase.canAccessPlayer) return
         isLimitedRangePlaybackActive = false
         val clampedTime = timeMs.coerceIn(0L, durationMs)
 
@@ -141,10 +170,14 @@ internal class EditorPlaybackController(
     fun release() {
         stopProgressUpdate()
         mediaPlayer?.let { player ->
-            if (player.isPlaying) player.stop()
+            if (playbackPhase.canAccessPlayer && runCatching { player.isPlaying }.getOrDefault(false)) {
+                runCatching { player.stop() }
+            }
             player.release()
         }
         mediaPlayer = null
+        playbackPhase = PlaybackPhase.RELEASED
+        isPlaying = false
     }
 
     private fun bindTimelinePlaybackCallbacks() {
@@ -168,7 +201,7 @@ internal class EditorPlaybackController(
         binding.waveformTimelineView.onLimitedPlaybackRangeOutOfView = {
             if (isLimitedRangePlaybackActive) {
                 isLimitedRangePlaybackActive = false
-                mediaPlayer?.let { player ->
+                mediaPlayer?.takeIf { playbackPhase.canAccessPlayer }?.let { player ->
                     if (player.isPlaying) player.pause()
                 }
                 isPlaying = false
@@ -209,7 +242,7 @@ internal class EditorPlaybackController(
     }
 
     private fun togglePlayPause() {
-        mediaPlayer?.let { player ->
+        mediaPlayer?.takeIf { playbackPhase.canAccessPlayer }?.let { player ->
             if (player.isPlaying) {
                 player.pause()
                 isPlaying = false
@@ -225,6 +258,7 @@ internal class EditorPlaybackController(
     }
 
     private fun correctPlaybackAfterViewportDrag(positionMs: Long) {
+        if (!playbackPhase.canAccessPlayer) return
         val correctedPositionMs = positionMs.coerceIn(0L, durationMs)
         val wasPlaying = mediaPlayer?.isPlaying == true
         mediaPlayer?.seekTo(correctedPositionMs.toInt())
@@ -234,6 +268,7 @@ internal class EditorPlaybackController(
     }
 
     private fun startLimitedRangePlayback(subtitleIndex: Int) {
+        if (!playbackPhase.canAccessPlayer) return
         val target = subtitles().getOrNull(subtitleIndex) ?: return
         val player = mediaPlayer ?: return
         limitedPlaybackEntry = target
@@ -302,7 +337,7 @@ internal class EditorPlaybackController(
     }
 
     private fun updatePlayerUi() {
-        mediaPlayer?.let { player ->
+        mediaPlayer?.takeIf { playbackPhase.canAccessPlayer }?.let { player ->
             if (!isUserSeeking) {
                 val position = player.currentPosition.toLong()
                 if (position >= currentPositionMs || currentPositionMs - position > 200) {
@@ -370,7 +405,7 @@ internal class EditorPlaybackController(
         }
         binding.tvPlaybackSpeed.text = label
 
-        mediaPlayer?.let { player ->
+        mediaPlayer?.takeIf { playbackPhase.canAccessPlayer }?.let { player ->
             try {
                 player.playbackParams = PlaybackParams().setSpeed(speed)
             } catch (e: Exception) {
