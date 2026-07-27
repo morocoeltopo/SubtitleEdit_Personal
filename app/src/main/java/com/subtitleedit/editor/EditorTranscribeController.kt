@@ -43,18 +43,38 @@ internal class EditorTranscribeController(
         val sourceLanguage = settings.getQuickTranscribeSourceLanguage()
         val encoderPath: String
         val decoderPath: String
+        val joinerPath: String
         val tokensPath: String
-        if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-            encoderPath = settings.getSenseVoiceModelPath()
-            decoderPath = ""
-            tokensPath = settings.getSenseVoiceTokensPath()
-        } else {
-            encoderPath = settings.getWhisperEncoderPath()
-            decoderPath = settings.getWhisperDecoderPath()
-            tokensPath = settings.getWhisperTokensPath()
+        when (modelType) {
+            SettingsManager.ASR_MODEL_SENSEVOICE -> {
+                encoderPath = settings.getSenseVoiceModelPath()
+                decoderPath = ""
+                joinerPath = ""
+                tokensPath = settings.getSenseVoiceTokensPath()
+            }
+            SettingsManager.ASR_MODEL_PARAKEET_TDT -> {
+                encoderPath = settings.getParakeetTdtEncoderPath()
+                decoderPath = settings.getParakeetTdtDecoderPath()
+                joinerPath = settings.getParakeetTdtJoinerPath()
+                tokensPath = settings.getParakeetTdtTokensPath()
+            }
+            SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> {
+                encoderPath = settings.getParakeetCtcModelPath()
+                decoderPath = ""
+                joinerPath = ""
+                tokensPath = settings.getParakeetCtcTokensPath()
+            }
+            else -> {
+                encoderPath = settings.getWhisperEncoderPath()
+                decoderPath = settings.getWhisperDecoderPath()
+                joinerPath = ""
+                tokensPath = settings.getWhisperTokensPath()
+            }
         }
         if (encoderPath.isBlank() || tokensPath.isBlank() ||
-            (modelType == SettingsManager.ASR_MODEL_WHISPER && decoderPath.isBlank())
+            (modelType == SettingsManager.ASR_MODEL_WHISPER && decoderPath.isBlank()) ||
+            (modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT &&
+                (decoderPath.isBlank() || joinerPath.isBlank()))
         ) {
             showMessage("请先在语音转字幕配置中设置识别模型")
             return
@@ -78,6 +98,7 @@ internal class EditorTranscribeController(
                     audioFile,
                     encoderPath,
                     decoderPath,
+                    joinerPath,
                     tokensPath,
                     modelType,
                     selectedLanguage
@@ -134,6 +155,7 @@ internal class EditorTranscribeController(
         inputFile: File,
         encoderPath: String,
         decoderPath: String,
+        joinerPath: String,
         tokensPath: String,
         modelType: String,
         sourceLanguage: String
@@ -162,6 +184,7 @@ internal class EditorTranscribeController(
                 val recognizer = WhisperRecognizer(
                     encoderPath = encoderPath,
                     decoderPath = decoderPath,
+                    joinerPath = joinerPath,
                     tokensPath = tokensPath,
                     useVad = false,
                     language = sourceLanguage,

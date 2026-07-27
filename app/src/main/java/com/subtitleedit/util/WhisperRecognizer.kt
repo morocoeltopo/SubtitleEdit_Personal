@@ -16,6 +16,7 @@ import java.io.File
 class WhisperRecognizer(
     private val encoderPath: String,
     private val decoderPath: String,
+    private val joinerPath: String = "",
     private val tokensPath: String,
     private val vadModelPath: String = "",
     private val useVad: Boolean = true,
@@ -65,26 +66,44 @@ class WhisperRecognizer(
      */
     private fun initRecognizer(): Result<Unit> {
         return try {
+            val primaryFileName = when {
+                isSenseVoice() -> "sensevoice.onnx"
+                isParakeetCtc() -> "model.int8.onnx"
+                else -> "encoder.int8.onnx"
+            }
             val encoderFile = resolveModelPath(
                 encoderPath,
-                if (isSenseVoice()) "sensevoice.onnx" else "encoder.onnx"
+                primaryFileName
             )
-            val decoderFile = if (isSenseVoice()) null else resolveModelPath(decoderPath, "decoder.onnx")
+            val decoderFile = if (requiresDecoder()) {
+                resolveModelPath(decoderPath, "decoder.int8.onnx")
+            } else {
+                null
+            }
+            val joinerFile = if (isParakeetTdt()) {
+                resolveModelPath(joinerPath, "joiner.int8.onnx")
+            } else {
+                null
+            }
             val tokensFile = resolveModelPath(tokensPath, "tokens.txt")
 
             if (encoderFile == null) {
-                return Result.failure(Exception("无法读取 encoder 文件"))
+                return Result.failure(Exception("无法读取${if (isSingleFileModel()) "模型" else " encoder"}文件"))
             }
-            if (!isSenseVoice() && decoderFile == null) {
+            if (requiresDecoder() && decoderFile == null) {
                 return Result.failure(Exception("无法读取 decoder 文件"))
+            }
+            if (isParakeetTdt() && joinerFile == null) {
+                return Result.failure(Exception("无法读取 joiner 文件"))
             }
             if (tokensFile == null) {
                 return Result.failure(Exception("无法读取 tokens 文件"))
             }
 
             Log.d(TAG, "模型文件准备完成:")
-            Log.d(TAG, "  ${if (isSenseVoice()) "model" else "encoder"}: $encoderFile")
+            Log.d(TAG, "  ${if (isSingleFileModel()) "model" else "encoder"}: $encoderFile")
             decoderFile?.let { Log.d(TAG, "  decoder: $it") }
+            joinerFile?.let { Log.d(TAG, "  joiner: $it") }
             Log.d(TAG, "  tokens: $tokensFile")
 
             if (useVad) {
@@ -143,35 +162,57 @@ class WhisperRecognizer(
                 Log.d(TAG, "已禁用 VAD 分段，将使用固定分段识别")
             }
 
-            val modelConfig = if (isSenseVoice()) {
-                val senseVoiceLanguage = mapSenseVoiceLanguage(language)
-                Log.d(TAG, "SenseVoice language=$senseVoiceLanguage (selected=$language)")
-                OfflineModelConfig(
-                    senseVoice = OfflineSenseVoiceModelConfig(
-                        model = encoderFile,
-                        language = senseVoiceLanguage,
-                        useInverseTextNormalization = true
+            val modelConfig = when {
+                isSenseVoice() -> {
+                    val senseVoiceLanguage = mapSenseVoiceLanguage(language)
+                    Log.d(TAG, "SenseVoice language=$senseVoiceLanguage (selected=$language)")
+                    OfflineModelConfig(
+                        senseVoice = OfflineSenseVoiceModelConfig(
+                            model = encoderFile,
+                            language = senseVoiceLanguage,
+                            useInverseTextNormalization = true
+                        ),
+                        tokens = tokensFile,
+                        numThreads = 4,
+                        debug = true,
+                        provider = "cpu"
+                    )
+                }
+                isParakeetTdt() -> OfflineModelConfig(
+                    transducer = OfflineTransducerModelConfig(
+                        encoder = encoderFile,
+                        decoder = decoderFile!!,
+                        joiner = joinerFile!!
                     ),
                     tokens = tokensFile,
-                    numThreads = 4,
+                    numThreads = settingsManager().getSpeechWhisperThreads(),
+                    debug = true,
+                    provider = "cpu",
+                    modelType = "nemo_transducer"
+                )
+                isParakeetCtc() -> OfflineModelConfig(
+                    nemo = OfflineNemoEncDecCtcModelConfig(model = encoderFile),
+                    tokens = tokensFile,
+                    numThreads = settingsManager().getSpeechWhisperThreads(),
                     debug = true,
                     provider = "cpu"
                 )
-            } else OfflineModelConfig(
-                whisper = OfflineWhisperModelConfig(
-                    encoder = encoderFile,
-                    decoder = decoderFile!!,
-                    language = if (language == "自动检测") "" else mapLanguage(language),
-                    task = "transcribe",
-                    tailPaddings = 1000,
-                    enableTokenTimestamps = true,
-                    enableSegmentTimestamps = false
-                ),
-                tokens = tokensFile,
-                numThreads = settingsManager().getSpeechWhisperThreads(),
-                debug = true,
-                provider = "cpu"
-            )
+                else -> OfflineModelConfig(
+                    whisper = OfflineWhisperModelConfig(
+                        encoder = encoderFile,
+                        decoder = decoderFile!!,
+                        language = if (language == "自动检测") "" else mapLanguage(language),
+                        task = "transcribe",
+                        tailPaddings = 1000,
+                        enableTokenTimestamps = true,
+                        enableSegmentTimestamps = false
+                    ),
+                    tokens = tokensFile,
+                    numThreads = settingsManager().getSpeechWhisperThreads(),
+                    debug = true,
+                    provider = "cpu"
+                )
+            }
 
             val config = OfflineRecognizerConfig(
                 featConfig = FeatureConfig(
@@ -179,7 +220,7 @@ class WhisperRecognizer(
                     featureDim = 80
                 ),
                 modelConfig = modelConfig,
-                hotwordsScore = if (isSenseVoice()) 1.0f else settingsManager().getSpeechHotwordsScore()
+                hotwordsScore = if (supportsHotwords()) settingsManager().getSpeechHotwordsScore() else 1.0f
             )
 
             Log.d(TAG, "开始初始化 OfflineRecognizer...")
@@ -189,7 +230,7 @@ class WhisperRecognizer(
                 return Result.failure(Exception("OfflineRecognizer 初始化返回 null"))
             }
 
-            Log.d(TAG, "${if (isSenseVoice()) "SenseVoice" else "Whisper"} 识别器初始化成功")
+            Log.d(TAG, "${modelDisplayName()} 识别器初始化成功")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "初始化识别器失败", e)
@@ -433,7 +474,7 @@ class WhisperRecognizer(
 
             Log.d(TAG, "创建 stream...")
             val stream = try {
-                val hotwords = if (isSenseVoice()) "" else buildSpeechHotwords()
+                val hotwords = if (supportsHotwords()) buildSpeechHotwords() else ""
                 if (hotwords.isEmpty()) {
                     rec.createStream()
                 } else {
@@ -663,6 +704,24 @@ class WhisperRecognizer(
     }
 
     private fun isSenseVoice(): Boolean = modelType == SettingsManager.ASR_MODEL_SENSEVOICE
+
+    private fun isParakeetTdt(): Boolean = modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT
+
+    private fun isParakeetCtc(): Boolean = modelType == SettingsManager.ASR_MODEL_PARAKEET_CTC_JA
+
+    private fun isSingleFileModel(): Boolean = isSenseVoice() || isParakeetCtc()
+
+    private fun requiresDecoder(): Boolean = !isSingleFileModel()
+
+    private fun supportsHotwords(): Boolean =
+        modelType == SettingsManager.ASR_MODEL_WHISPER || isParakeetTdt()
+
+    private fun modelDisplayName(): String = when (modelType) {
+        SettingsManager.ASR_MODEL_SENSEVOICE -> "SenseVoice"
+        SettingsManager.ASR_MODEL_PARAKEET_TDT -> "Parakeet TDT"
+        SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> "Parakeet CTC 日语"
+        else -> "Whisper"
+    }
 
     /**
      * 为 VAD 原始段构建识别窗口。相邻段共享的静音间隔最多各使用一半，

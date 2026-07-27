@@ -10,6 +10,7 @@ import android.os.Environment
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.graphics.Typeface
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Toast
@@ -39,6 +40,7 @@ class ModelSettingsActivity : AppCompatActivity() {
 
     private var encoderPath: String = ""
     private var decoderPath: String = ""
+    private var joinerPath: String = ""
     private var tokensPath: String = ""
     private var vadModelPath: String = ""
     private var modelType: String = SettingsManager.ASR_MODEL_WHISPER
@@ -66,6 +68,12 @@ class ModelSettingsActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { handleSelectedDecoder(it) }
+    }
+
+    private val joinerPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { handleSelectedJoiner(it) }
     }
 
     // Tokens 文件选择器
@@ -125,6 +133,10 @@ class ModelSettingsActivity : AppCompatActivity() {
             decoderPickerLauncher.launch(arrayOf("*/*"))
         }
 
+        binding.btnSelectJoiner.setOnClickListener {
+            joinerPickerLauncher.launch(arrayOf("*/*"))
+        }
+
         binding.btnSelectTokens.setOnClickListener {
             tokensPickerLauncher.launch(arrayOf("*/*"))
         }
@@ -143,6 +155,12 @@ class ModelSettingsActivity : AppCompatActivity() {
         }
 
         binding.btnSwitchAsrModel.setOnClickListener { showAsrModelPicker() }
+        binding.tvParakeetTdtOption.setOnClickListener {
+            selectParakeetVariant(SettingsManager.ASR_MODEL_PARAKEET_TDT)
+        }
+        binding.tvParakeetCtcOption.setOnClickListener {
+            selectParakeetVariant(SettingsManager.ASR_MODEL_PARAKEET_CTC_JA)
+        }
         binding.btnWhisperConfig.setOnClickListener {
             startActivity(Intent(this, WhisperSettingsActivity::class.java))
         }
@@ -158,22 +176,42 @@ class ModelSettingsActivity : AppCompatActivity() {
             OverwritingToast.makeText(this, "模型正在下载", Toast.LENGTH_SHORT).show()
             return
         }
-        if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-            AlertDialog.Builder(this)
-                .setTitle("一键下载导入")
-                .setMessage(
-                    "是否一键下载导入 SenseVoice 模型？\n\n" +
-                        "文件存放至：\n/Download/SubtitleEdit/models/${ModelDownloader.SENSEVOICE_DIRECTORY_NAME}\n\n" +
-                        "约占用 1.09 GB 存储空间。"
-                )
-                .setPositiveButton("下载并导入") { _, _ ->
-                    runWithModelStorageAccess { startSenseVoiceDownload() }
-                }
-                .setNegativeButton("取消", null)
-                .show()
-        } else {
-            showWhisperDownloadModelPicker()
+        when (modelType) {
+            SettingsManager.ASR_MODEL_SENSEVOICE -> {
+                AlertDialog.Builder(this)
+                    .setTitle("一键下载导入")
+                    .setMessage(
+                        "是否一键下载导入 SenseVoice 模型？\n\n" +
+                            "文件存放至：\n/Download/SubtitleEdit/models/${ModelDownloader.SENSEVOICE_DIRECTORY_NAME}\n\n" +
+                            "约占用 1.09 GB 存储空间。"
+                    )
+                    .setPositiveButton("下载并导入") { _, _ ->
+                        runWithModelStorageAccess { startSenseVoiceDownload() }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
+            SettingsManager.ASR_MODEL_PARAKEET_TDT ->
+                confirmParakeetDownload(ModelDownloader.PARAKEET_TDT_MODEL)
+            SettingsManager.ASR_MODEL_PARAKEET_CTC_JA ->
+                confirmParakeetDownload(ModelDownloader.PARAKEET_CTC_JA_MODEL)
+            else -> showWhisperDownloadModelPicker()
         }
+    }
+
+    private fun confirmParakeetDownload(option: ModelDownloader.ParakeetModelOption) {
+        AlertDialog.Builder(this)
+            .setTitle("一键下载导入 ${option.displayName}")
+            .setMessage(
+                "${option.description}\n\n" +
+                    "文件存放至：\n/Download/SubtitleEdit/models/${option.directoryName}\n\n" +
+                    "${option.sizeLabel} 存储空间。"
+            )
+            .setPositiveButton("下载并导入") { _, _ ->
+                runWithModelStorageAccess { startParakeetDownload(option) }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun showWhisperDownloadModelPicker() {
@@ -293,12 +331,63 @@ class ModelSettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun confirmResetCurrentAsrModel() {
-        val modelName = if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-            "SenseVoice"
-        } else {
-            "Whisper"
+    private fun startParakeetDownload(option: ModelDownloader.ParakeetModelOption) {
+        if (modelDownloadJob?.isActive == true) return
+        val progressDialog = ModelDownloadProgressDialog(
+            this,
+            "下载 ${option.displayName} 模型"
+        ) { modelDownloadJob?.cancel() }
+        modelDownloadDialog = progressDialog
+        progressDialog.show()
+        setAsrModelActionsEnabled(false)
+
+        modelDownloadJob = lifecycleScope.launch {
+            try {
+                val files = ModelDownloader.downloadParakeet(option) { progress ->
+                    runOnUiThread { modelDownloadDialog?.update(progress) }
+                }
+                modelType = option.modelType
+                settingsManager.setAsrModelType(modelType)
+                when (option.architecture) {
+                    ModelDownloader.ParakeetArchitecture.TDT -> {
+                        settingsManager.setParakeetTdtEncoderPath(Uri.fromFile(requireNotNull(files.encoder)).toString())
+                        settingsManager.setParakeetTdtDecoderPath(Uri.fromFile(requireNotNull(files.decoder)).toString())
+                        settingsManager.setParakeetTdtJoinerPath(Uri.fromFile(requireNotNull(files.joiner)).toString())
+                        settingsManager.setParakeetTdtTokensPath(Uri.fromFile(files.tokens).toString())
+                    }
+                    ModelDownloader.ParakeetArchitecture.CTC -> {
+                        settingsManager.setParakeetCtcModelPath(Uri.fromFile(requireNotNull(files.model)).toString())
+                        settingsManager.setParakeetCtcTokensPath(Uri.fromFile(files.tokens).toString())
+                    }
+                }
+                loadModelPaths()
+                updateAsrModelUi()
+                progressDialog.dismiss()
+                OverwritingToast.makeText(
+                    this@ModelSettingsActivity,
+                    "${option.displayName} 模型已下载、解压并自动选择\n${files.tokens.parentFile?.absolutePath}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: CancellationException) {
+                progressDialog.dismiss()
+                throw e
+            } catch (e: Exception) {
+                progressDialog.dismiss()
+                OverwritingToast.makeText(
+                    this@ModelSettingsActivity,
+                    "${option.displayName} 模型下载失败：${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                setAsrModelActionsEnabled(true)
+                if (modelDownloadDialog === progressDialog) modelDownloadDialog = null
+                modelDownloadJob = null
+            }
         }
+    }
+
+    private fun confirmResetCurrentAsrModel() {
+        val modelName = currentModelDisplayName()
         AlertDialog.Builder(this)
             .setTitle("重置模型选择")
             .setMessage(
@@ -311,10 +400,11 @@ class ModelSettingsActivity : AppCompatActivity() {
     }
 
     private fun resetCurrentAsrModel() {
-        if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-            settingsManager.clearSenseVoiceModelPaths()
-        } else {
-            settingsManager.clearWhisperModelPaths()
+        when (modelType) {
+            SettingsManager.ASR_MODEL_SENSEVOICE -> settingsManager.clearSenseVoiceModelPaths()
+            SettingsManager.ASR_MODEL_PARAKEET_TDT -> settingsManager.clearParakeetTdtModelPaths()
+            SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> settingsManager.clearParakeetCtcModelPaths()
+            else -> settingsManager.clearWhisperModelPaths()
         }
         loadModelPaths()
         updateAsrModelUi()
@@ -509,12 +599,15 @@ class ModelSettingsActivity : AppCompatActivity() {
 
             val fileName = getFileNameFromUri(uri)
 
-            val isValid = fileName.endsWith(".onnx", ignoreCase = true) &&
-                (modelType == SettingsManager.ASR_MODEL_SENSEVOICE || fileName.contains("encoder", ignoreCase = true))
+            val isValid = fileName.endsWith(".onnx", ignoreCase = true) && when (modelType) {
+                SettingsManager.ASR_MODEL_SENSEVOICE,
+                SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> true
+                else -> fileName.contains("encoder", ignoreCase = true)
+            }
             if (!isValid) {
                 com.subtitleedit.util.OverwritingToast.makeText(
                     this,
-                    if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) "请选择 SenseVoice 模型文件（以 .onnx 结尾）"
+                    if (isSingleFileModel()) "请选择 ONNX 模型文件（以 .onnx 结尾）"
                     else "请选择 encoder 模型文件（文件名应包含 'encoder' 且以 .onnx 结尾）",
                     Toast.LENGTH_LONG
                 ).show()
@@ -522,10 +615,11 @@ class ModelSettingsActivity : AppCompatActivity() {
             }
 
             encoderPath = uri.toString()
-            if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-                settingsManager.setSenseVoiceModelPath(encoderPath)
-            } else {
-                settingsManager.setWhisperEncoderPath(encoderPath)
+            when (modelType) {
+                SettingsManager.ASR_MODEL_SENSEVOICE -> settingsManager.setSenseVoiceModelPath(encoderPath)
+                SettingsManager.ASR_MODEL_PARAKEET_TDT -> settingsManager.setParakeetTdtEncoderPath(encoderPath)
+                SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> settingsManager.setParakeetCtcModelPath(encoderPath)
+                else -> settingsManager.setWhisperEncoderPath(encoderPath)
             }
             binding.tvEncoderFile.text = fileName
             updateAsrModelUi()
@@ -555,12 +649,39 @@ class ModelSettingsActivity : AppCompatActivity() {
             }
 
             decoderPath = uri.toString()
-            settingsManager.setWhisperDecoderPath(decoderPath)
+            if (modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT) {
+                settingsManager.setParakeetTdtDecoderPath(decoderPath)
+            } else {
+                settingsManager.setWhisperDecoderPath(decoderPath)
+            }
             binding.tvDecoderFile.text = fileName
             updateAsrModelUi()
 
         } catch (e: Exception) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "选择文件失败：${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun handleSelectedJoiner(uri: Uri) {
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val fileName = getFileNameFromUri(uri)
+            if (!fileName.contains("joiner", ignoreCase = true) ||
+                !fileName.endsWith(".onnx", ignoreCase = true)
+            ) {
+                OverwritingToast.makeText(
+                    this,
+                    "请选择 joiner 模型文件（文件名应包含 'joiner' 且以 .onnx 结尾）",
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+            joinerPath = uri.toString()
+            settingsManager.setParakeetTdtJoinerPath(joinerPath)
+            binding.tvJoinerFile.text = fileName
+            updateAsrModelUi()
+        } catch (e: Exception) {
+            OverwritingToast.makeText(this, "选择文件失败：${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -584,10 +705,11 @@ class ModelSettingsActivity : AppCompatActivity() {
             }
 
             tokensPath = uri.toString()
-            if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-                settingsManager.setSenseVoiceTokensPath(tokensPath)
-            } else {
-                settingsManager.setWhisperTokensPath(tokensPath)
+            when (modelType) {
+                SettingsManager.ASR_MODEL_SENSEVOICE -> settingsManager.setSenseVoiceTokensPath(tokensPath)
+                SettingsManager.ASR_MODEL_PARAKEET_TDT -> settingsManager.setParakeetTdtTokensPath(tokensPath)
+                SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> settingsManager.setParakeetCtcTokensPath(tokensPath)
+                else -> settingsManager.setWhisperTokensPath(tokensPath)
             }
             binding.tvTokensFile.text = fileName
             updateAsrModelUi()
@@ -663,37 +785,52 @@ class ModelSettingsActivity : AppCompatActivity() {
     }
 
     private fun showModelGuide() {
-        val message = if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) """
-            SenseVoice 模型下载指引：
+        val message = when (modelType) {
+            SettingsManager.ASR_MODEL_SENSEVOICE -> """
+                SenseVoice 模型下载指引：
 
-            1. 推荐直接点击“选择模型”右侧的蓝色下载按钮，应用会自动下载、解压并选择模型。
+                1. 推荐点击“选择模型”右侧的蓝色下载按钮，应用会自动下载、解压并选择模型。
 
-            2. 如需手动下载，可访问 GitHub 下载页面：
-               https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models
+                2. SenseVoice 支持中文、英语、日语、韩语和粤语，并能识别部分声音事件与情绪。
 
-            3. 下载普通 CPU ONNX 模型包：
-               sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17
+                3. 手动导入需要选择 model.int8.onnx（或 model.onnx）和 tokens.txt。
+            """.trimIndent()
+            SettingsManager.ASR_MODEL_PARAKEET_TDT -> """
+                Parakeet TDT 0.6B v3 模型说明：
 
-            4. 分别选择：
-               • model.int8.onnx（或 model.onnx）
-               • tokens.txt
+                1. 推荐点击蓝色下载按钮一键下载、解压并选择模型，约占用 640 MB。
 
-        """.trimIndent() else """
-            Whisper 模型下载指引：
+                2. 这是 NVIDIA NeMo FastConformer-TDT 模型，支持英语、法语、德语、西班牙语、意大利语、俄语、乌克兰语等 25 种欧洲语言，可自动识别语言，并输出标点、大小写和时间信息。
 
-            如果需要使用其他whisper模型，可自行下载导入。
+                3. 当前应用仍按 VAD 或固定时长分段进行离线识别；每个分段内部可利用 TDT 上下文，但不会在分段之间传递解码状态。
 
-            1. 访问 GitHub 下载页面：
-               https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models
+                4. 手动导入需要选择 encoder.int8.onnx、decoder.int8.onnx、joiner.int8.onnx 和 tokens.txt。
 
-            2. 下载模型文件（需要以下 3 个文件）：
-               • encoder.onnx
-               • decoder.onnx
-               • tokens.txt
+                5. 该模型不支持中文和日语。
+            """.trimIndent()
+            SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> """
+                Parakeet CTC 0.6B 日语模型说明：
 
-            3. 分别点击"选择 Encoder"、"选择 Decoder"、"选择 Tokens"按钮选择对应文件
+                1. 推荐点击蓝色下载按钮一键下载、解压并选择模型，约占用 628 MB。
 
-        """.trimIndent()
+                2. 这是 NVIDIA NeMo Parakeet 日语模型导出的 CTC 分支，适合日语音频转写和日语字幕生成。
+
+                3. CTC 结构使用单个模型文件，解码和部署比 TDT 简单；该模型只用于日语，不支持中文，也不用于多语自动检测。
+
+                4. 手动导入需要选择 model.int8.onnx 和 tokens.txt。
+            """.trimIndent()
+            else -> """
+                Whisper 模型下载指引：
+
+                Whisper 是通用多语言语音识别模型，可在源语言中选择指定语言或使用自动检测。
+
+                1. 推荐点击蓝色下载按钮选择 Tiny、Small、Large v3 或 Turbo，应用会自动下载、解压并选择模型。
+
+                2. 模型越大通常识别效果越好，但需要更多存储、内存和处理时间。
+
+                3. 手动导入需要选择 encoder.onnx、decoder.onnx 和 tokens.txt。
+            """.trimIndent()
+        }
 
         AlertDialog.Builder(this)
             .setTitle("模型下载指引")
@@ -707,12 +844,26 @@ class ModelSettingsActivity : AppCompatActivity() {
     }
 
     private fun showAsrModelPicker() {
-        val labels = arrayOf("Whisper", "SenseVoice")
-        val checked = if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) 1 else 0
+        val types = arrayOf(
+            SettingsManager.ASR_MODEL_WHISPER,
+            SettingsManager.ASR_MODEL_SENSEVOICE,
+            SettingsManager.ASR_MODEL_PARAKEET_TDT
+        )
+        val labels = arrayOf(
+            "Whisper",
+            "SenseVoice",
+            "Parakeet"
+        )
+        val checked = when (modelType) {
+            SettingsManager.ASR_MODEL_SENSEVOICE -> 1
+            SettingsManager.ASR_MODEL_PARAKEET_TDT,
+            SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> 2
+            else -> 0
+        }
         AlertDialog.Builder(this)
             .setTitle("选择识别模型")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
-                val selectedType = if (which == 1) SettingsManager.ASR_MODEL_SENSEVOICE else SettingsManager.ASR_MODEL_WHISPER
+                val selectedType = types[which]
                 if (selectedType != modelType) {
                     modelType = selectedType
                     settingsManager.setAsrModelType(selectedType)
@@ -725,19 +876,45 @@ class ModelSettingsActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun selectParakeetVariant(selectedType: String) {
+        if (selectedType == modelType) return
+        modelType = selectedType
+        settingsManager.setAsrModelType(selectedType)
+        loadModelPaths()
+        updateAsrModelUi()
+    }
+
     private fun loadModelPaths() {
-        if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-            encoderPath = settingsManager.getSenseVoiceModelPath()
-            decoderPath = ""
-            tokensPath = settingsManager.getSenseVoiceTokensPath()
-        } else {
-            encoderPath = settingsManager.getWhisperEncoderPath()
-            decoderPath = settingsManager.getWhisperDecoderPath()
-            tokensPath = settingsManager.getWhisperTokensPath()
+        when (modelType) {
+            SettingsManager.ASR_MODEL_SENSEVOICE -> {
+                encoderPath = settingsManager.getSenseVoiceModelPath()
+                decoderPath = ""
+                joinerPath = ""
+                tokensPath = settingsManager.getSenseVoiceTokensPath()
+            }
+            SettingsManager.ASR_MODEL_PARAKEET_TDT -> {
+                encoderPath = settingsManager.getParakeetTdtEncoderPath()
+                decoderPath = settingsManager.getParakeetTdtDecoderPath()
+                joinerPath = settingsManager.getParakeetTdtJoinerPath()
+                tokensPath = settingsManager.getParakeetTdtTokensPath()
+            }
+            SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> {
+                encoderPath = settingsManager.getParakeetCtcModelPath()
+                decoderPath = ""
+                joinerPath = ""
+                tokensPath = settingsManager.getParakeetCtcTokensPath()
+            }
+            else -> {
+                encoderPath = settingsManager.getWhisperEncoderPath()
+                decoderPath = settingsManager.getWhisperDecoderPath()
+                joinerPath = ""
+                tokensPath = settingsManager.getWhisperTokensPath()
+            }
         }
         discardInaccessibleAsrModels()
         binding.tvEncoderFile.text = encoderPath.takeIf { it.isNotEmpty() }?.let { getFileNameFromUri(Uri.parse(it)) } ?: "未选择"
         binding.tvDecoderFile.text = decoderPath.takeIf { it.isNotEmpty() }?.let { getFileNameFromUri(Uri.parse(it)) } ?: "未选择"
+        binding.tvJoinerFile.text = joinerPath.takeIf { it.isNotEmpty() }?.let { getFileNameFromUri(Uri.parse(it)) } ?: "未选择"
         binding.tvTokensFile.text = tokensPath.takeIf { it.isNotEmpty() }?.let { getFileNameFromUri(Uri.parse(it)) } ?: "未选择"
     }
 
@@ -745,24 +922,35 @@ class ModelSettingsActivity : AppCompatActivity() {
         var discarded = false
         if (encoderPath.isNotBlank() && !canReadSavedUri(encoderPath)) {
             encoderPath = ""
-            if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-                settingsManager.setSenseVoiceModelPath("")
-            } else {
-                settingsManager.setWhisperEncoderPath("")
+            when (modelType) {
+                SettingsManager.ASR_MODEL_SENSEVOICE -> settingsManager.setSenseVoiceModelPath("")
+                SettingsManager.ASR_MODEL_PARAKEET_TDT -> settingsManager.setParakeetTdtEncoderPath("")
+                SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> settingsManager.setParakeetCtcModelPath("")
+                else -> settingsManager.setWhisperEncoderPath("")
             }
             discarded = true
         }
         if (decoderPath.isNotBlank() && !canReadSavedUri(decoderPath)) {
             decoderPath = ""
-            settingsManager.setWhisperDecoderPath("")
+            if (modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT) {
+                settingsManager.setParakeetTdtDecoderPath("")
+            } else {
+                settingsManager.setWhisperDecoderPath("")
+            }
+            discarded = true
+        }
+        if (joinerPath.isNotBlank() && !canReadSavedUri(joinerPath)) {
+            joinerPath = ""
+            settingsManager.setParakeetTdtJoinerPath("")
             discarded = true
         }
         if (tokensPath.isNotBlank() && !canReadSavedUri(tokensPath)) {
             tokensPath = ""
-            if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-                settingsManager.setSenseVoiceTokensPath("")
-            } else {
-                settingsManager.setWhisperTokensPath("")
+            when (modelType) {
+                SettingsManager.ASR_MODEL_SENSEVOICE -> settingsManager.setSenseVoiceTokensPath("")
+                SettingsManager.ASR_MODEL_PARAKEET_TDT -> settingsManager.setParakeetTdtTokensPath("")
+                SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> settingsManager.setParakeetCtcTokensPath("")
+                else -> settingsManager.setWhisperTokensPath("")
             }
             discarded = true
         }
@@ -794,16 +982,44 @@ class ModelSettingsActivity : AppCompatActivity() {
 
     private fun updateAsrModelUi() {
         val senseVoice = modelType == SettingsManager.ASR_MODEL_SENSEVOICE
-        val hasSelectedModel = encoderPath.isNotBlank() || decoderPath.isNotBlank() || tokensPath.isNotBlank()
-        binding.tvAsrModelTitle.text = if (senseVoice) "SenseVoice 模型" else "Whisper 模型"
-        binding.btnDownloadAsrModel.contentDescription =
-            if (senseVoice) "一键下载并导入 SenseVoice 模型" else "选择并下载 Whisper 模型"
+        val parakeetTdt = modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT
+        val parakeetCtc = modelType == SettingsManager.ASR_MODEL_PARAKEET_CTC_JA
+        val parakeet = parakeetTdt || parakeetCtc
+        val hasSelectedModel = encoderPath.isNotBlank() || decoderPath.isNotBlank() ||
+            joinerPath.isNotBlank() || tokensPath.isNotBlank()
+        binding.tvAsrModelTitle.text = if (parakeet) "Parakeet 模型" else "${currentModelDisplayName()} 模型"
+        binding.btnDownloadAsrModel.contentDescription = "一键下载并导入 ${currentModelDisplayName()} 模型"
         binding.btnDownloadAsrModel.visibility = if (hasSelectedModel) View.GONE else View.VISIBLE
         binding.btnResetAsrModel.visibility = if (hasSelectedModel) View.VISIBLE else View.GONE
-        binding.tvEncoderLabel.text = if (senseVoice) "SenseVoice 模型" else "Encoder 模型"
-        binding.btnSelectEncoder.text = if (senseVoice) "选择模型" else "选择 Encoder"
-        binding.layoutDecoder.visibility = if (senseVoice) View.GONE else View.VISIBLE
-        binding.btnWhisperConfig.visibility = if (senseVoice) View.GONE else View.VISIBLE
+        binding.tvEncoderLabel.text = when {
+            senseVoice -> "SenseVoice 模型"
+            parakeetCtc -> "CTC 模型"
+            else -> "Encoder 模型"
+        }
+        binding.btnSelectEncoder.text = if (senseVoice || parakeetCtc) "选择模型" else "选择 Encoder"
+        binding.layoutDecoder.visibility = if (senseVoice || parakeetCtc) View.GONE else View.VISIBLE
+        binding.layoutJoiner.visibility = if (parakeetTdt) View.VISIBLE else View.GONE
+        binding.btnWhisperConfig.visibility = if (modelType == SettingsManager.ASR_MODEL_WHISPER) View.VISIBLE else View.GONE
+        binding.layoutParakeetVariantOptions.visibility = if (parakeet) View.VISIBLE else View.GONE
+        binding.tvParakeetTdtOption.setTextColor(
+            ContextCompat.getColor(this, if (parakeetTdt) R.color.primary else R.color.on_surface_variant)
+        )
+        binding.tvParakeetCtcOption.setTextColor(
+            ContextCompat.getColor(this, if (parakeetCtc) R.color.primary else R.color.on_surface_variant)
+        )
+        binding.tvParakeetTdtOption.setTypeface(null, if (parakeetTdt) Typeface.BOLD else Typeface.NORMAL)
+        binding.tvParakeetCtcOption.setTypeface(null, if (parakeetCtc) Typeface.BOLD else Typeface.NORMAL)
+    }
+
+    private fun isSingleFileModel(): Boolean =
+        modelType == SettingsManager.ASR_MODEL_SENSEVOICE ||
+            modelType == SettingsManager.ASR_MODEL_PARAKEET_CTC_JA
+
+    private fun currentModelDisplayName(): String = when (modelType) {
+        SettingsManager.ASR_MODEL_SENSEVOICE -> "SenseVoice"
+        SettingsManager.ASR_MODEL_PARAKEET_TDT -> "Parakeet TDT 0.6B v3"
+        SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> "Parakeet CTC 0.6B 日语"
+        else -> "Whisper"
     }
 
     override fun onDestroy() {

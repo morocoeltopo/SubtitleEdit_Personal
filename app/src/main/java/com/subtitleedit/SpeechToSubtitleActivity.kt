@@ -43,6 +43,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
     private val selectedMediaFiles = mutableListOf<SelectedMediaFile>()
     private var encoderPath: String = ""
     private var decoderPath: String = ""
+    private var joinerPath: String = ""
     private var tokensPath: String = ""
     private var modelType: String = SettingsManager.ASR_MODEL_WHISPER
     private var vadModelPath: String = ""
@@ -208,14 +209,31 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
      */
     private fun loadSavedModel(resetOutputDirectory: Boolean = true) {
         modelType = settingsManager.getAsrModelType()
-        if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
-            encoderPath = settingsManager.getSenseVoiceModelPath()
-            decoderPath = ""
-            tokensPath = settingsManager.getSenseVoiceTokensPath()
-        } else {
-            encoderPath = settingsManager.getWhisperEncoderPath()
-            decoderPath = settingsManager.getWhisperDecoderPath()
-            tokensPath = settingsManager.getWhisperTokensPath()
+        when (modelType) {
+            SettingsManager.ASR_MODEL_SENSEVOICE -> {
+                encoderPath = settingsManager.getSenseVoiceModelPath()
+                decoderPath = ""
+                joinerPath = ""
+                tokensPath = settingsManager.getSenseVoiceTokensPath()
+            }
+            SettingsManager.ASR_MODEL_PARAKEET_TDT -> {
+                encoderPath = settingsManager.getParakeetTdtEncoderPath()
+                decoderPath = settingsManager.getParakeetTdtDecoderPath()
+                joinerPath = settingsManager.getParakeetTdtJoinerPath()
+                tokensPath = settingsManager.getParakeetTdtTokensPath()
+            }
+            SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> {
+                encoderPath = settingsManager.getParakeetCtcModelPath()
+                decoderPath = ""
+                joinerPath = ""
+                tokensPath = settingsManager.getParakeetCtcTokensPath()
+            }
+            else -> {
+                encoderPath = settingsManager.getWhisperEncoderPath()
+                decoderPath = settingsManager.getWhisperDecoderPath()
+                joinerPath = ""
+                tokensPath = settingsManager.getWhisperTokensPath()
+            }
         }
         vadModelPath = settingsManager.getVadModelPath()
 
@@ -301,17 +319,14 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
      * 更新开始按钮状态
      */
     private fun updateStartButtonState() {
-        binding.btnStart.isEnabled = selectedMediaFiles.isNotEmpty() && encoderPath.isNotEmpty() &&
-            tokensPath.isNotEmpty() &&
-            (modelType == SettingsManager.ASR_MODEL_SENSEVOICE || decoderPath.isNotEmpty())
+        binding.btnStart.isEnabled = selectedMediaFiles.isNotEmpty() && isCurrentAsrModelComplete()
     }
 
     /**
      * 开始转换
      */
     private fun startConversion() {
-        if (selectedMediaFiles.isEmpty() || encoderPath.isEmpty() || tokensPath.isEmpty() ||
-            (modelType == SettingsManager.ASR_MODEL_WHISPER && decoderPath.isEmpty())) {
+        if (selectedMediaFiles.isEmpty() || !isCurrentAsrModelComplete()) {
             com.subtitleedit.util.OverwritingToast.makeText(this, "请先选择文件和模型", Toast.LENGTH_SHORT).show()
             return
         }
@@ -560,13 +575,14 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
 
             showProgress("$progressPrefix 正在识别语音...", 10)
             val selectedLanguage = languageOptions[binding.spinnerSourceLanguage.selectedItemPosition]
-            appendRuntimeLog("识别：初始化 ${if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) "SenseVoice" else "Whisper"} 模型并开始识别")
+            appendRuntimeLog("识别：初始化 ${currentAsrModelDisplayName()} 模型并开始识别")
             if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) {
                 appendRuntimeLog("SenseVoice 指定语言：$selectedLanguage (${senseVoiceLanguageCode(selectedLanguage)})")
             }
             val recognizer = WhisperRecognizer(
                 encoderPath = encoderPath,
                 decoderPath = decoderPath,
+                joinerPath = joinerPath,
                 tokensPath = tokensPath,
                 vadModelPath = getActiveVadModelPath(),
                 useVad = shouldUseVad(),
@@ -659,17 +675,43 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
 
     private fun appendSpeechModelConfig() {
         appendRuntimeLog("模型配置：")
-        appendRuntimeLog("  类型：${if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) "SenseVoice" else "Whisper"}")
-        appendRuntimeLog("  ${if (modelType == SettingsManager.ASR_MODEL_SENSEVOICE) "模型" else "Encoder"}：${displayModelPath(encoderPath)}")
-        if (modelType == SettingsManager.ASR_MODEL_WHISPER) appendRuntimeLog("  Decoder：${displayModelPath(decoderPath)}")
+        appendRuntimeLog("  类型：${currentAsrModelDisplayName()}")
+        val singleFileModel = modelType == SettingsManager.ASR_MODEL_SENSEVOICE ||
+            modelType == SettingsManager.ASR_MODEL_PARAKEET_CTC_JA
+        appendRuntimeLog("  ${if (singleFileModel) "模型" else "Encoder"}：${displayModelPath(encoderPath)}")
+        if (!singleFileModel) appendRuntimeLog("  Decoder：${displayModelPath(decoderPath)}")
+        if (modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT) {
+            appendRuntimeLog("  Joiner：${displayModelPath(joinerPath)}")
+        }
         appendRuntimeLog("  Tokens：${displayModelPath(tokensPath)}")
-        if (modelType == SettingsManager.ASR_MODEL_WHISPER) appendRuntimeLog("  Whisper 线程：${settingsManager.getSpeechWhisperThreads()}")
+        if (modelType != SettingsManager.ASR_MODEL_SENSEVOICE) {
+            appendRuntimeLog("  识别线程：${settingsManager.getSpeechWhisperThreads()}")
+        }
         appendRuntimeLog("  VAD：${if (shouldUseVad()) "启用" else "禁用，固定分段 ${settingsManager.getSpeechFixedSegmentSeconds()} 秒"}")
         if (shouldUseVad()) {
             appendRuntimeLog("  VAD 模型：${if (settingsManager.isVadUseBuiltInModel()) "内置 silero_vad.onnx" else displayModelPath(vadModelPath)}")
             appendRuntimeLog("  VAD 阈值：${settingsManager.getVadThreshold()}，最小静音：${settingsManager.getVadMinSilenceDuration()}s，最小语音：${settingsManager.getVadMinSpeechDuration()}s，最大语音：${settingsManager.getVadMaxSpeechDuration()}s")
         }
-        if (modelType == SettingsManager.ASR_MODEL_WHISPER) appendRuntimeLog("  热词：${if (settingsManager.isSpeechHotwordsEnabled()) "启用，权重 ${settingsManager.getSpeechHotwordsScore()}" else "未启用"}")
+        if (modelType == SettingsManager.ASR_MODEL_WHISPER || modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT) {
+            appendRuntimeLog("  热词：${if (settingsManager.isSpeechHotwordsEnabled()) "启用，权重 ${settingsManager.getSpeechHotwordsScore()}" else "未启用"}")
+        }
+    }
+
+    private fun isCurrentAsrModelComplete(): Boolean {
+        if (encoderPath.isBlank() || tokensPath.isBlank()) return false
+        return when (modelType) {
+            SettingsManager.ASR_MODEL_SENSEVOICE,
+            SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> true
+            SettingsManager.ASR_MODEL_PARAKEET_TDT -> decoderPath.isNotBlank() && joinerPath.isNotBlank()
+            else -> decoderPath.isNotBlank()
+        }
+    }
+
+    private fun currentAsrModelDisplayName(): String = when (modelType) {
+        SettingsManager.ASR_MODEL_SENSEVOICE -> "SenseVoice"
+        SettingsManager.ASR_MODEL_PARAKEET_TDT -> "Parakeet TDT 0.6B v3"
+        SettingsManager.ASR_MODEL_PARAKEET_CTC_JA -> "Parakeet CTC 0.6B 日语"
+        else -> "Whisper"
     }
 
     private fun getActiveVadModelPath(): String {

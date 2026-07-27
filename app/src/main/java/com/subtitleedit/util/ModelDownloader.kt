@@ -50,6 +50,7 @@ object ModelDownloader {
         .build()
     private val senseVoiceMutex = Mutex()
     private val whisperMutex = Mutex()
+    private val parakeetMutex = Mutex()
     private val demixMutex = Mutex()
 
     data class Progress(
@@ -72,6 +73,29 @@ object ModelDownloader {
     data class WhisperModelOption(
         val id: String,
         val displayName: String,
+        val directoryName: String,
+        val url: String,
+        val sizeLabel: String
+    )
+
+    enum class ParakeetArchitecture {
+        TDT,
+        CTC
+    }
+
+    data class ParakeetFiles(
+        val model: File? = null,
+        val encoder: File? = null,
+        val decoder: File? = null,
+        val joiner: File? = null,
+        val tokens: File
+    )
+
+    data class ParakeetModelOption(
+        val modelType: String,
+        val displayName: String,
+        val description: String,
+        val architecture: ParakeetArchitecture,
         val directoryName: String,
         val url: String,
         val sizeLabel: String
@@ -107,6 +131,28 @@ object ModelDownloader {
             sizeLabel = "约 1 GB"
         )
     )
+
+    val PARAKEET_TDT_MODEL = ParakeetModelOption(
+        modelType = SettingsManager.ASR_MODEL_PARAKEET_TDT,
+        displayName = "Parakeet TDT 0.6B v3",
+        description = "支持 25 种欧洲语言，自动识别语言，包含标点、大小写和时间信息。",
+        architecture = ParakeetArchitecture.TDT,
+        directoryName = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
+        url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2",
+        sizeLabel = "约 640 MB"
+    )
+
+    val PARAKEET_CTC_JA_MODEL = ParakeetModelOption(
+        modelType = SettingsManager.ASR_MODEL_PARAKEET_CTC_JA,
+        displayName = "Parakeet CTC 0.6B 日语",
+        description = "面向日语语音转写，采用 CTC 解码，适合日语字幕生成。",
+        architecture = ParakeetArchitecture.CTC,
+        directoryName = "sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8",
+        url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8.tar.bz2",
+        sizeLabel = "约 628 MB"
+    )
+
+    val PARAKEET_MODELS = listOf(PARAKEET_TDT_MODEL, PARAKEET_CTC_JA_MODEL)
 
     @Suppress("DEPRECATION")
     fun modelsDirectory(): File = File(
@@ -222,6 +268,68 @@ object ModelDownloader {
                     ?: throw IOException("Whisper 模型解压完成，但模型文件校验失败")
                 archive.delete()
                 onProgress(Progress("Whisper ${option.displayName} 模型已下载并解压"))
+                installedFiles
+            } catch (e: CancellationException) {
+                stagingDir.deleteRecursively()
+                throw e
+            } catch (e: Exception) {
+                stagingDir.deleteRecursively()
+                archive.delete()
+                throw e
+            }
+        }
+    }
+
+    suspend fun downloadParakeet(
+        option: ParakeetModelOption,
+        onProgress: (Progress) -> Unit
+    ): ParakeetFiles = parakeetMutex.withLock {
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val modelsDir = requireModelsDirectory()
+            val targetDir = File(modelsDir, option.directoryName)
+            recoverParakeetBackup(targetDir, option)
+            findParakeetFiles(targetDir, option.architecture)?.let {
+                onProgress(Progress("检测到本地 ${option.displayName} 模型，跳过下载并直接导入"))
+                return@withContext it
+            }
+
+            val archive = File(modelsDir, "${option.directoryName}.tar.bz2")
+            if (!archive.isFile || archive.length() == 0L) {
+                downloadFile(option.url, archive, "正在下载 ${option.displayName} 模型", onProgress)
+            }
+
+            val stagingDir = File(modelsDir, ".parakeet_${option.modelType}_extracting")
+            if (stagingDir.exists()) stagingDir.deleteRecursively()
+            if (!stagingDir.mkdirs()) throw IOException("无法创建 Parakeet 解压临时目录")
+
+            try {
+                val progressMessage = "正在解压 ${option.displayName} 模型"
+                onProgress(Progress(progressMessage, 0L, archive.length()))
+                extractTarBz2(
+                    archive = archive,
+                    outputDir = stagingDir,
+                    progressMessage = progressMessage,
+                    shouldWrite = { isParakeetRequiredFile(it, option.architecture) },
+                    onProgress = onProgress
+                )
+                val stagedFiles = findParakeetFiles(stagingDir, option.architecture)
+                    ?: throw IOException("压缩包中未找到完整的 ${option.displayName} 模型文件")
+
+                val roots = listOfNotNull(
+                    stagedFiles.model,
+                    stagedFiles.encoder,
+                    stagedFiles.decoder,
+                    stagedFiles.joiner,
+                    stagedFiles.tokens
+                ).map { directChildContaining(stagingDir, it) }.distinct()
+                val sourceRoot = roots.singleOrNull() ?: stagingDir
+                installParakeetDirectory(sourceRoot, targetDir, option)
+                if (stagingDir.exists()) stagingDir.deleteRecursively()
+
+                val installedFiles = findParakeetFiles(targetDir, option.architecture)
+                    ?: throw IOException("Parakeet 模型解压完成，但模型文件校验失败")
+                archive.delete()
+                onProgress(Progress("${option.displayName} 模型已下载并解压"))
                 installedFiles
             } catch (e: CancellationException) {
                 stagingDir.deleteRecursively()
@@ -533,6 +641,22 @@ object ModelDownloader {
             (fileName.contains("encoder", ignoreCase = true) ||
                 fileName.contains("decoder", ignoreCase = true))
 
+    private fun isParakeetRequiredFile(
+        fileName: String,
+        architecture: ParakeetArchitecture
+    ): Boolean = fileName.lowercase() in parakeetRequiredFileNames(architecture)
+
+    internal fun parakeetRequiredFileNames(architecture: ParakeetArchitecture): Set<String> =
+        when (architecture) {
+            ParakeetArchitecture.TDT -> setOf(
+                "encoder.int8.onnx",
+                "decoder.int8.onnx",
+                "joiner.int8.onnx",
+                "tokens.txt"
+            )
+            ParakeetArchitecture.CTC -> setOf("model.int8.onnx", "tokens.txt")
+        }
+
     private fun findSenseVoiceFiles(root: File): SenseVoiceFiles? {
         if (!root.isDirectory) return null
         val files = runCatching { root.walkTopDown().filter { it.isFile }.toList() }.getOrNull()
@@ -639,6 +763,40 @@ object ModelDownloader {
         return null
     }
 
+    private fun findParakeetFiles(
+        root: File,
+        architecture: ParakeetArchitecture
+    ): ParakeetFiles? {
+        if (!root.isDirectory) return null
+        val files = runCatching { root.walkTopDown().filter { it.isFile }.toList() }.getOrNull()
+            ?: return null
+
+        fun requiredOnnx(name: String): File? = files.firstOrNull {
+            it.name.equals(name, ignoreCase = true) && it.length() >= MIN_ONNX_SIZE
+        }
+
+        val tokens = files.firstOrNull {
+            it.name.equals("tokens.txt", ignoreCase = true) && it.length() > 0L
+        } ?: return null
+
+        return when (architecture) {
+            ParakeetArchitecture.TDT -> {
+                val encoder = requiredOnnx("encoder.int8.onnx") ?: return null
+                val decoder = requiredOnnx("decoder.int8.onnx") ?: return null
+                val joiner = requiredOnnx("joiner.int8.onnx") ?: return null
+                if (setOf(encoder.parentFile, decoder.parentFile, joiner.parentFile, tokens.parentFile).size != 1) {
+                    return null
+                }
+                ParakeetFiles(encoder = encoder, decoder = decoder, joiner = joiner, tokens = tokens)
+            }
+            ParakeetArchitecture.CTC -> {
+                val model = requiredOnnx("model.int8.onnx") ?: return null
+                if (model.parentFile != tokens.parentFile) return null
+                ParakeetFiles(model = model, tokens = tokens)
+            }
+        }
+    }
+
     private fun tokenDistance(model: File, tokens: File): Int {
         if (model.parentFile == tokens.parentFile) return 0
         return kotlin.math.abs(model.absolutePath.length - tokens.absolutePath.length) + 1
@@ -722,6 +880,44 @@ object ModelDownloader {
             if (!backup.renameTo(destination)) {
                 moveDirectory(backup, destination)
             }
+        } else {
+            backup.deleteRecursively()
+        }
+    }
+
+    private fun installParakeetDirectory(
+        source: File,
+        destination: File,
+        option: ParakeetModelOption
+    ) {
+        val backup = File(destination.parentFile, ".parakeet_${option.modelType}_backup")
+        backup.deleteRecursively()
+        if (destination.exists() && !destination.renameTo(backup)) {
+            throw IOException("无法备份旧的 Parakeet 模型目录")
+        }
+        try {
+            moveDirectory(source, destination)
+            if (findParakeetFiles(destination, option.architecture) == null) {
+                throw IOException("安装后的 Parakeet 模型校验失败")
+            }
+            backup.deleteRecursively()
+        } catch (e: Exception) {
+            destination.deleteRecursively()
+            if (backup.exists()) backup.renameTo(destination)
+            throw e
+        }
+    }
+
+    private fun recoverParakeetBackup(destination: File, option: ParakeetModelOption) {
+        val backup = File(destination.parentFile, ".parakeet_${option.modelType}_backup")
+        if (!backup.exists()) return
+        if (findParakeetFiles(destination, option.architecture) != null) {
+            backup.deleteRecursively()
+            return
+        }
+        if (findParakeetFiles(backup, option.architecture) != null) {
+            destination.deleteRecursively()
+            if (!backup.renameTo(destination)) moveDirectory(backup, destination)
         } else {
             backup.deleteRecursively()
         }

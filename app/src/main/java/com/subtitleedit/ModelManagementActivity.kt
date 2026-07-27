@@ -140,6 +140,22 @@ class ModelManagementActivity : AppCompatActivity() {
                             calculateSize(file)
                         )
                     }
+                    file.isDirectory && file.name == ModelDownloader.PARAKEET_TDT_MODEL.directoryName -> {
+                        items += ModelItem(
+                            "Parakeet 模型",
+                            ModelDownloader.PARAKEET_TDT_MODEL.displayName,
+                            file,
+                            calculateSize(file)
+                        )
+                    }
+                    file.isDirectory && file.name == ModelDownloader.PARAKEET_CTC_JA_MODEL.directoryName -> {
+                        items += ModelItem(
+                            "Parakeet 模型",
+                            ModelDownloader.PARAKEET_CTC_JA_MODEL.displayName,
+                            file,
+                            calculateSize(file)
+                        )
+                    }
                     file.isDirectory && file.name == ModelDownloader.SEPARATION_DIRECTORY_NAME -> {
                         file.listFiles().orEmpty().filterNot { it.name.startsWith(".") }.forEach { model ->
                             items += ModelItem("人声分离模型", model.name, model, calculateSize(model))
@@ -153,8 +169,9 @@ class ModelManagementActivity : AppCompatActivity() {
         val categoryOrder = mapOf(
             "SenseVoice 模型" to 0,
             "Whisper 模型" to 1,
-            "人声分离模型" to 2,
-            "其他模型文件" to 3
+            "Parakeet 模型" to 2,
+            "人声分离模型" to 3,
+            "其他模型文件" to 4
         )
         return items.sortedWith(
             compareBy<ModelItem> { categoryOrder[it.category] ?: Int.MAX_VALUE }
@@ -300,6 +317,22 @@ class ModelManagementActivity : AppCompatActivity() {
         )
         if (senseVoicePaths.any { pointsInsideTarget(it, target) }) {
             settingsManager.clearSenseVoiceModelPaths()
+        }
+        val parakeetTdtPaths = listOf(
+            settingsManager.getParakeetTdtEncoderPath(),
+            settingsManager.getParakeetTdtDecoderPath(),
+            settingsManager.getParakeetTdtJoinerPath(),
+            settingsManager.getParakeetTdtTokensPath()
+        )
+        if (parakeetTdtPaths.any { pointsInsideTarget(it, target) }) {
+            settingsManager.clearParakeetTdtModelPaths()
+        }
+        val parakeetCtcPaths = listOf(
+            settingsManager.getParakeetCtcModelPath(),
+            settingsManager.getParakeetCtcTokensPath()
+        )
+        if (parakeetCtcPaths.any { pointsInsideTarget(it, target) }) {
+            settingsManager.clearParakeetCtcModelPaths()
         }
         if (pointsInsideTarget(settingsManager.getVadModelPath(), target)) {
             settingsManager.setVadModelPath("")

@@ -35,6 +35,12 @@ class SettingsManager private constructor(context: Context) {
         private const val KEY_ASR_MODEL_TYPE = "asr_model_type"
         private const val KEY_SENSEVOICE_MODEL_PATH = "sensevoice_model_path"
         private const val KEY_SENSEVOICE_TOKENS_PATH = "sensevoice_tokens_path"
+        private const val KEY_PARAKEET_TDT_ENCODER_PATH = "parakeet_tdt_encoder_path"
+        private const val KEY_PARAKEET_TDT_DECODER_PATH = "parakeet_tdt_decoder_path"
+        private const val KEY_PARAKEET_TDT_JOINER_PATH = "parakeet_tdt_joiner_path"
+        private const val KEY_PARAKEET_TDT_TOKENS_PATH = "parakeet_tdt_tokens_path"
+        private const val KEY_PARAKEET_CTC_MODEL_PATH = "parakeet_ctc_model_path"
+        private const val KEY_PARAKEET_CTC_TOKENS_PATH = "parakeet_ctc_tokens_path"
         private const val KEY_VAD_MODEL_PATH = "vad_model_path"
         private const val KEY_VAD_USE_BUILT_IN_MODEL = "vad_use_built_in_model"
         private const val KEY_VAD_THRESHOLD = "vad_threshold"
@@ -68,6 +74,15 @@ class SettingsManager private constructor(context: Context) {
 
         const val ASR_MODEL_WHISPER = "whisper"
         const val ASR_MODEL_SENSEVOICE = "sensevoice"
+        const val ASR_MODEL_PARAKEET_TDT = "parakeet_tdt"
+        const val ASR_MODEL_PARAKEET_CTC_JA = "parakeet_ctc_ja"
+
+        val ASR_MODEL_TYPES = setOf(
+            ASR_MODEL_WHISPER,
+            ASR_MODEL_SENSEVOICE,
+            ASR_MODEL_PARAKEET_TDT,
+            ASR_MODEL_PARAKEET_CTC_JA
+        )
 
         val TRANSCRIPTION_LANGUAGE_OPTIONS = listOf(
             "自动检测",
@@ -294,7 +309,7 @@ class SettingsManager private constructor(context: Context) {
     }
 
     fun getAsrModelType(): String = prefs.getString(KEY_ASR_MODEL_TYPE, ASR_MODEL_WHISPER)
-        ?.takeIf { it == ASR_MODEL_WHISPER || it == ASR_MODEL_SENSEVOICE }
+        ?.takeIf { it in ASR_MODEL_TYPES }
         ?: ASR_MODEL_WHISPER
 
     fun setAsrModelType(type: String) {
@@ -317,6 +332,58 @@ class SettingsManager private constructor(context: Context) {
         prefs.edit()
             .putString(KEY_SENSEVOICE_MODEL_PATH, "")
             .putString(KEY_SENSEVOICE_TOKENS_PATH, "")
+            .apply()
+    }
+
+    fun getParakeetTdtEncoderPath(): String = prefs.getString(KEY_PARAKEET_TDT_ENCODER_PATH, "") ?: ""
+
+    fun setParakeetTdtEncoderPath(path: String) {
+        prefs.edit().putString(KEY_PARAKEET_TDT_ENCODER_PATH, path).apply()
+    }
+
+    fun getParakeetTdtDecoderPath(): String = prefs.getString(KEY_PARAKEET_TDT_DECODER_PATH, "") ?: ""
+
+    fun setParakeetTdtDecoderPath(path: String) {
+        prefs.edit().putString(KEY_PARAKEET_TDT_DECODER_PATH, path).apply()
+    }
+
+    fun getParakeetTdtJoinerPath(): String = prefs.getString(KEY_PARAKEET_TDT_JOINER_PATH, "") ?: ""
+
+    fun setParakeetTdtJoinerPath(path: String) {
+        prefs.edit().putString(KEY_PARAKEET_TDT_JOINER_PATH, path).apply()
+    }
+
+    fun getParakeetTdtTokensPath(): String = prefs.getString(KEY_PARAKEET_TDT_TOKENS_PATH, "") ?: ""
+
+    fun setParakeetTdtTokensPath(path: String) {
+        prefs.edit().putString(KEY_PARAKEET_TDT_TOKENS_PATH, path).apply()
+    }
+
+    fun clearParakeetTdtModelPaths() {
+        prefs.edit()
+            .putString(KEY_PARAKEET_TDT_ENCODER_PATH, "")
+            .putString(KEY_PARAKEET_TDT_DECODER_PATH, "")
+            .putString(KEY_PARAKEET_TDT_JOINER_PATH, "")
+            .putString(KEY_PARAKEET_TDT_TOKENS_PATH, "")
+            .apply()
+    }
+
+    fun getParakeetCtcModelPath(): String = prefs.getString(KEY_PARAKEET_CTC_MODEL_PATH, "") ?: ""
+
+    fun setParakeetCtcModelPath(path: String) {
+        prefs.edit().putString(KEY_PARAKEET_CTC_MODEL_PATH, path).apply()
+    }
+
+    fun getParakeetCtcTokensPath(): String = prefs.getString(KEY_PARAKEET_CTC_TOKENS_PATH, "") ?: ""
+
+    fun setParakeetCtcTokensPath(path: String) {
+        prefs.edit().putString(KEY_PARAKEET_CTC_TOKENS_PATH, path).apply()
+    }
+
+    fun clearParakeetCtcModelPaths() {
+        prefs.edit()
+            .putString(KEY_PARAKEET_CTC_MODEL_PATH, "")
+            .putString(KEY_PARAKEET_CTC_TOKENS_PATH, "")
             .apply()
     }
 
