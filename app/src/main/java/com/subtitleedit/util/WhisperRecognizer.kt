@@ -340,6 +340,8 @@ class WhisperRecognizer(
                 }
 
                 if (vadSegments != null) {
+                    val dynamicPaddingEnabled = settingsManager().isSpeechVadDynamicPaddingEnabled()
+                    Log.d(TAG, "VAD 动态 padding：${if (dynamicPaddingEnabled) "启用" else "关闭"}")
                     // 对每个语音段进行识别
                     for ((index, vadSegment) in vadSegments.withIndex()) {
                         if (isCancelled()) {
@@ -355,7 +357,8 @@ class WhisperRecognizer(
                         val recognitionWindow = createRecognitionWindow(
                             segments = vadSegments,
                             index = index,
-                            totalSamples = totalSamples
+                            totalSamples = totalSamples,
+                            dynamicPaddingEnabled = dynamicPaddingEnabled
                         )
                         val recognitionStartTimeMs =
                             (recognitionWindow.startSample * 1000L) / SAMPLE_RATE
@@ -366,7 +369,7 @@ class WhisperRecognizer(
                             TAG,
                             "识别语音段 ${index + 1}/${vadSegments.size}: " +
                                 "原始 ${vadSegment.startTime}ms - ${vadSegment.endTime}ms, " +
-                                "padding 后 ${recognitionStartTimeMs}ms - ${recognitionEndTimeMs}ms"
+                                "识别窗口 ${recognitionStartTimeMs}ms - ${recognitionEndTimeMs}ms"
                         )
 
                         val segmentData = reader.readRange(
@@ -590,19 +593,54 @@ class WhisperRecognizer(
 
             val texts = mutableListOf<String>()
             Pcm16WavReader(audioFile).use { reader ->
+                val dynamicPaddingEnabled = settingsManager().isSpeechVadDynamicPaddingEnabled()
+                val sampleRanges = ranges.map { range ->
+                    val startMs = range.first.coerceAtLeast(0L)
+                    val endMs = range.last.coerceAtLeast(startMs)
+                    val startSample = (startMs * SAMPLE_RATE / 1000L)
+                        .coerceAtMost(reader.totalSamples)
+                    val endSample = (endMs * SAMPLE_RATE / 1000L)
+                        .coerceIn(startSample, reader.totalSamples)
+                    startSample to endSample
+                }
+
                 ranges.forEachIndexed { index, range ->
                     if (isCancelled()) return Result.failure(Exception("用户取消"))
 
                     progressCallback(index + 1, ranges.size)
                     val startMs = range.first.coerceAtLeast(0L)
                     val endMs = range.last.coerceAtLeast(startMs)
-                    val startSample = (startMs * SAMPLE_RATE / 1000L)
-                        .coerceAtMost(reader.totalSamples)
-                    val endSample = (endMs * SAMPLE_RATE / 1000L)
-                        .coerceAtMost(reader.totalSamples)
-                    val sampleCount = (endSample - startSample).toInt()
-                    val text = if (sampleCount > 0) {
-                        recognizeSegment(reader.readRange(startSample, sampleCount), startMs)
+                    val (startSample, endSample) = sampleRanges[index]
+                    val previousEnd = if (index > 0) {
+                        sampleRanges[index - 1].second.coerceIn(0L, startSample)
+                    } else {
+                        0L
+                    }
+                    val nextStart = if (index < sampleRanges.lastIndex) {
+                        sampleRanges[index + 1].first.coerceIn(endSample, reader.totalSamples)
+                    } else {
+                        reader.totalSamples
+                    }
+                    val recognitionWindow = createRecognitionWindow(
+                        currentStart = startSample,
+                        currentEnd = endSample,
+                        previousEnd = previousEnd,
+                        nextStart = nextStart,
+                        dynamicPaddingEnabled = dynamicPaddingEnabled
+                    )
+                    val recognitionStartMs = recognitionWindow.startSample * 1000L / SAMPLE_RATE
+                    val text = if (recognitionWindow.sampleCount > 0) {
+                        constrainToTimeRange(
+                            recognizedSegments = recognizeSegment(
+                                reader.readRange(
+                                    recognitionWindow.startSample,
+                                    recognitionWindow.sampleCount
+                                ),
+                                recognitionStartMs
+                            ),
+                            rangeStartTime = startMs,
+                            rangeEndTime = endMs
+                        )
                             .joinToString(separator = "") { it.text }
                             .trim()
                     } else {
@@ -730,7 +768,8 @@ class WhisperRecognizer(
     private fun createRecognitionWindow(
         segments: List<VadSegment>,
         index: Int,
-        totalSamples: Long
+        totalSamples: Long,
+        dynamicPaddingEnabled: Boolean
     ): RecognitionWindow {
         val current = segments[index]
         val currentStart = current.startSample.toLong().coerceIn(0L, totalSamples)
@@ -748,6 +787,29 @@ class WhisperRecognizer(
             segments[index + 1].startSample.toLong().coerceIn(currentEnd, totalSamples)
         } else {
             totalSamples
+        }
+
+        return createRecognitionWindow(
+            currentStart = currentStart,
+            currentEnd = currentEnd,
+            previousEnd = previousEnd,
+            nextStart = nextStart,
+            dynamicPaddingEnabled = dynamicPaddingEnabled
+        )
+    }
+
+    private fun createRecognitionWindow(
+        currentStart: Long,
+        currentEnd: Long,
+        previousEnd: Long,
+        nextStart: Long,
+        dynamicPaddingEnabled: Boolean
+    ): RecognitionWindow {
+        if (!dynamicPaddingEnabled) {
+            return RecognitionWindow(
+                startSample = currentStart,
+                sampleCount = (currentEnd - currentStart).toInt()
+            )
         }
 
         val targetPaddingSamples = (VAD_CONTEXT_PADDING_MS * SAMPLE_RATE) / 1000L
@@ -768,10 +830,20 @@ class WhisperRecognizer(
     private fun constrainToVadRange(
         recognizedSegments: List<SubtitleSegment>,
         vadSegment: VadSegment
+    ): List<SubtitleSegment> = constrainToTimeRange(
+        recognizedSegments = recognizedSegments,
+        rangeStartTime = vadSegment.startTime,
+        rangeEndTime = vadSegment.endTime
+    )
+
+    private fun constrainToTimeRange(
+        recognizedSegments: List<SubtitleSegment>,
+        rangeStartTime: Long,
+        rangeEndTime: Long
     ): List<SubtitleSegment> {
         val constrained = recognizedSegments.mapNotNull { segment ->
-            val startTime = segment.startTime.coerceIn(vadSegment.startTime, vadSegment.endTime)
-            val endTime = segment.endTime.coerceIn(vadSegment.startTime, vadSegment.endTime)
+            val startTime = segment.startTime.coerceIn(rangeStartTime, rangeEndTime)
+            val endTime = segment.endTime.coerceIn(rangeStartTime, rangeEndTime)
             if (endTime > startTime) {
                 segment.copy(startTime = startTime, endTime = endTime)
             } else {
@@ -783,8 +855,8 @@ class WhisperRecognizer(
 
         return constrained.mapIndexed { index, segment ->
             segment.copy(
-                startTime = if (index == 0) vadSegment.startTime else segment.startTime,
-                endTime = if (index == constrained.lastIndex) vadSegment.endTime else segment.endTime
+                startTime = if (index == 0) rangeStartTime else segment.startTime,
+                endTime = if (index == constrained.lastIndex) rangeEndTime else segment.endTime
             )
         }
     }

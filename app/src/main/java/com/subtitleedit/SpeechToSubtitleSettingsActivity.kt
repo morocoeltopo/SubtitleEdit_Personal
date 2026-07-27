@@ -45,6 +45,10 @@ class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        binding.switchVadDynamicPadding.setOnCheckedChangeListener { _, checked ->
+            if (!loading) settingsManager.setSpeechVadDynamicPaddingEnabled(checked)
+        }
+
         binding.switchHotwords.setOnCheckedChangeListener { _, checked ->
             if (!loading) settingsManager.setSpeechHotwordsEnabled(checked)
         }
@@ -84,6 +88,7 @@ class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
         val segmentSeconds = settingsManager.getSpeechFixedSegmentSeconds()
         binding.sliderFixedSegmentSeconds.value = segmentSeconds.toFloat()
         binding.etFixedSegmentSeconds.setText(String.format(Locale.US, "%d", segmentSeconds))
+        binding.switchVadDynamicPadding.isChecked = settingsManager.isSpeechVadDynamicPaddingEnabled()
 
         binding.switchHotwords.isChecked = settingsManager.isSpeechHotwordsEnabled()
         binding.etHotwords.setText(settingsManager.getSpeechHotwords())

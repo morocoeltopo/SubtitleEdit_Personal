@@ -48,6 +48,7 @@ class SettingsManager private constructor(context: Context) {
         private const val KEY_VAD_MIN_SPEECH_DURATION = "vad_min_speech_duration"
         private const val KEY_VAD_MAX_SPEECH_DURATION = "vad_max_speech_duration"
         private const val KEY_STT_FIXED_SEGMENT_SECONDS = "stt_fixed_segment_seconds"
+        private const val KEY_STT_VAD_DYNAMIC_PADDING_ENABLED = "stt_vad_dynamic_padding_enabled"
         private const val KEY_STT_WHISPER_THREADS = "stt_whisper_threads"
         private const val KEY_STT_HOTWORDS_ENABLED = "stt_hotwords_enabled"
         private const val KEY_STT_HOTWORDS = "stt_hotwords"
@@ -481,6 +482,14 @@ class SettingsManager private constructor(context: Context) {
 
     fun setSpeechFixedSegmentSeconds(seconds: Int) {
         prefs.edit().putInt(KEY_STT_FIXED_SEGMENT_SECONDS, seconds.coerceIn(5, 120)).apply()
+    }
+
+    fun isSpeechVadDynamicPaddingEnabled(): Boolean {
+        return prefs.getBoolean(KEY_STT_VAD_DYNAMIC_PADDING_ENABLED, true)
+    }
+
+    fun setSpeechVadDynamicPaddingEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_STT_VAD_DYNAMIC_PADDING_ENABLED, enabled).apply()
     }
 
     fun getSpeechWhisperThreads(): Int {
