@@ -2,6 +2,7 @@ package com.subtitleedit.adapter
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -19,6 +20,10 @@ import com.subtitleedit.R
 import com.subtitleedit.util.ArchiveManager
 import com.subtitleedit.util.FileUtils
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 /**
@@ -30,7 +35,11 @@ class FileListAdapter(
 ) : ListAdapter<File, FileListAdapter.FileViewHolder>(FileDiffCallback()) {
 
     private companion object {
-        val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v")
+        val AUDIO_EXTENSIONS = FileUtils.AUDIO_EXTENSIONS + setOf("opus", "ac3", "amr")
+        val VIDEO_EXTENSIONS = setOf(
+            "mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v",
+            "ts", "3gp", "mpg", "mpeg", "mts", "m2ts"
+        )
         val TEXT_EXTENSIONS = setOf("md", "log", "json", "xml", "csv", "ini", "conf")
         val IMAGE_EXTENSIONS = setOf(
             "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "tif", "tiff", "avif"
@@ -45,6 +54,9 @@ class FileListAdapter(
     private val thumbnailCache = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
+    private val mediaDurationCache = ConcurrentHashMap<String, String>()
+    private val pendingDurationKeys = ConcurrentHashMap.newKeySet<String>()
+    private val modifiedTimeFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     fun updateSelection(selectionMode: Boolean, selectedPaths: Set<String>) {
         this.selectionMode = selectionMode
@@ -65,8 +77,11 @@ class FileListAdapter(
     inner class FileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val ivFileIcon: ImageView = itemView.findViewById(R.id.ivFileIcon)
         private val tvFileName: TextView = itemView.findViewById(R.id.tvFileName)
+        private val fileDetailsRow: View = itemView.findViewById(R.id.fileDetailsRow)
         private val tvFileSize: TextView = itemView.findViewById(R.id.tvFileSize)
+        private val tvMediaDuration: TextView = itemView.findViewById(R.id.tvMediaDuration)
         private val tvFileExtension: TextView = itemView.findViewById(R.id.tvFileExtension)
+        private val tvFileModifiedTime: TextView = itemView.findViewById(R.id.tvFileModifiedTime)
         private val card: MaterialCardView = itemView as MaterialCardView
         private val iconPadding = (8 * itemView.resources.displayMetrics.density + 0.5f).toInt()
 
@@ -79,9 +94,13 @@ class FileListAdapter(
             // 设置图标
             if (file.isDirectory) {
                 ivFileIcon.setImageResource(R.drawable.ic_folder)
-                tvFileSize.visibility = View.GONE
+                fileDetailsRow.visibility = View.GONE
+                tvMediaDuration.tag = null
+                tvMediaDuration.visibility = View.GONE
                 tvFileExtension.visibility = View.GONE
+                tvFileModifiedTime.visibility = View.GONE
             } else {
+                fileDetailsRow.visibility = View.VISIBLE
                 val extension = file.extension.lowercase()
                 if (extension in IMAGE_EXTENSIONS) {
                     bindImageThumbnail(file, thumbnailKey)
@@ -90,7 +109,7 @@ class FileListAdapter(
                 } else {
                     ivFileIcon.setImageResource(
                         when {
-                            FileUtils.isAudioFile(file) -> R.drawable.ic_file_audio
+                            extension in AUDIO_EXTENSIONS -> R.drawable.ic_file_audio
                             extension in VIDEO_EXTENSIONS -> R.drawable.ic_file_video
                             extension in ArchiveManager.recognizedExtensions -> archiveIcon(file)
                             FileUtils.isSubtitleFile(file) || extension in TEXT_EXTENSIONS ->
@@ -102,7 +121,17 @@ class FileListAdapter(
                 tvFileSize.text = FileUtils.formatFileSize(file.length())
                 tvFileSize.visibility = View.VISIBLE
                 tvFileExtension.text = file.extension.uppercase()
-                tvFileExtension.visibility = View.VISIBLE
+                tvFileExtension.visibility = if (file.extension.isEmpty()) View.GONE else View.VISIBLE
+                tvFileModifiedTime.text = modifiedTimeFormat.format(Date(file.lastModified()))
+                tvFileModifiedTime.visibility = View.VISIBLE
+
+                val isMediaFile = extension in AUDIO_EXTENSIONS || extension in VIDEO_EXTENSIONS
+                if (isMediaFile) {
+                    bindMediaDuration(file)
+                } else {
+                    tvMediaDuration.tag = null
+                    tvMediaDuration.visibility = View.GONE
+                }
             }
             ivFileIcon.alpha = if (file.name.startsWith(".") && file.name != "..") 0.5f else 1f
 
@@ -124,6 +153,35 @@ class FileListAdapter(
             itemView.setOnLongClickListener {
                 onItemLongClick(file)
                 true
+            }
+        }
+
+        private fun bindMediaDuration(file: File) {
+            val cacheKey = thumbnailKey(file)
+            tvMediaDuration.tag = cacheKey
+            mediaDurationCache[cacheKey]?.let { duration ->
+                tvMediaDuration.text = duration
+                tvMediaDuration.visibility = if (duration.isEmpty()) View.GONE else View.VISIBLE
+                return
+            }
+
+            tvMediaDuration.text = "00:00"
+            tvMediaDuration.visibility = View.INVISIBLE
+            if (!pendingDurationKeys.add(cacheKey)) return
+
+            thumbnailExecutor.execute {
+                val duration = readMediaDuration(file)
+                mediaDurationCache[cacheKey] = duration
+                pendingDurationKeys.remove(cacheKey)
+                mainHandler.post {
+                    if (tvMediaDuration.tag == cacheKey) {
+                        tvMediaDuration.text = duration
+                        tvMediaDuration.visibility = if (duration.isEmpty()) View.GONE else View.VISIBLE
+                    } else {
+                        val position = currentList.indexOfFirst { thumbnailKey(it) == cacheKey }
+                        if (position >= 0) notifyItemChanged(position)
+                    }
+                }
             }
         }
 
@@ -198,6 +256,33 @@ class FileListAdapter(
             )
         }
 
+        private fun readMediaDuration(file: File): String {
+            val retriever = MediaMetadataRetriever()
+            return try {
+                retriever.setDataSource(file.absolutePath)
+                val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull()
+                    ?: return ""
+                formatMediaDuration(durationMs)
+            } catch (_: Exception) {
+                ""
+            } finally {
+                retriever.release()
+            }
+        }
+
+        private fun formatMediaDuration(durationMs: Long): String {
+            val totalSeconds = durationMs.coerceAtLeast(0L) / 1000L
+            val hours = totalSeconds / 3600L
+            val minutes = totalSeconds % 3600L / 60L
+            val seconds = totalSeconds % 60L
+            return if (hours > 0L) {
+                String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+            } else {
+                String.format(Locale.US, "%02d:%02d", minutes, seconds)
+            }
+        }
+
         private fun thumbnailKey(file: File): String =
             "${file.absolutePath}:${file.length()}:${file.lastModified()}"
 
@@ -224,7 +309,8 @@ class FileListAdapter(
         override fun areContentsTheSame(oldItem: File, newItem: File): Boolean {
             return oldItem.name == newItem.name && 
                    oldItem.length() == newItem.length() && 
-                   oldItem.isDirectory == newItem.isDirectory
+                   oldItem.isDirectory == newItem.isDirectory &&
+                   oldItem.lastModified() == newItem.lastModified()
         }
     }
 }

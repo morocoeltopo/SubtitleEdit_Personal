@@ -28,6 +28,7 @@ class ArchivePreviewAdapter(
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val icon: ImageView = itemView.findViewById(R.id.ivFileIcon)
         private val name: TextView = itemView.findViewById(R.id.tvFileName)
+        private val detailsRow: View = itemView.findViewById(R.id.fileDetailsRow)
         private val size: TextView = itemView.findViewById(R.id.tvFileSize)
         private val extension: TextView = itemView.findViewById(R.id.tvFileExtension)
 
@@ -35,12 +36,13 @@ class ArchivePreviewAdapter(
             name.text = item.name
             icon.setImageResource(iconFor(item))
             if (item.isDirectory) {
-                size.visibility = View.GONE
+                detailsRow.visibility = View.GONE
                 extension.visibility = View.GONE
                 itemView.isClickable = true
                 itemView.isFocusable = true
                 itemView.setOnClickListener { onDirectoryClick(item) }
             } else {
+                detailsRow.visibility = View.VISIBLE
                 size.text = if (item.size >= 0L) FileUtils.formatFileSize(item.size) else "大小未知"
                 size.visibility = View.VISIBLE
                 val suffix = item.name.substringAfterLast('.', "").uppercase()
