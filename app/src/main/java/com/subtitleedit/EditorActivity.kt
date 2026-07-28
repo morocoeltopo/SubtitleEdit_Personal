@@ -2003,6 +2003,10 @@ class EditorActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        // The editor title identifies the file the user opened. The audio used for
+        // playback may later be replaced by a repaired cache copy with another name.
+        setDocumentTitle(currentFile!!.name)
         
         // 先显示检测中提示，再异步检测 start time
         val checkingDialog = android.app.AlertDialog.Builder(this)
@@ -2038,11 +2042,6 @@ class EditorActivity : AppCompatActivity() {
         subtitleFilePath: String?,
         restoreDocument: Boolean
     ) {
-        setDocumentTitle(
-            if (restoreDocument) stateModel.documentTitle
-            else subtitleFilePath?.let { File(it).name } ?: "（无字幕文件）"
-        )
-        
         try {
             playbackController.prepare(audioFile)
         } catch (e: Exception) {

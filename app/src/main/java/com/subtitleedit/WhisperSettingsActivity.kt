@@ -7,7 +7,7 @@ import com.subtitleedit.databinding.ActivitySpeechToSubtitleSettingsBinding
 import com.subtitleedit.util.SettingsManager
 import java.util.Locale
 
-/** Whisper-specific controls. The shared layout also keeps the segmentation setting available. */
+/** Whisper-specific controls. Shared recognition-flow settings are configured globally. */
 class WhisperSettingsActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySpeechToSubtitleSettingsBinding
     private lateinit var settings: SettingsManager
@@ -23,6 +23,8 @@ class WhisperSettingsActivity : AppCompatActivity() {
         supportActionBar?.title = "Whisper 配置"
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         binding.tvRecognitionFlowTitle.visibility = View.GONE
+        binding.switchVadDynamicPadding.visibility = View.GONE
+        binding.tvVadDynamicPaddingHint.visibility = View.GONE
         binding.tvFixedSegmentTitle.visibility = View.GONE
         binding.tvFixedSegmentHint.visibility = View.GONE
         binding.layoutFixedSegment.visibility = View.GONE
