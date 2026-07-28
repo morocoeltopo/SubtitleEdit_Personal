@@ -382,7 +382,7 @@ class WhisperRecognizer(
                             sampleCount = recognitionWindow.sampleCount
                         )
 
-                        val ctcTimeRange = if (isParakeetCtc()) {
+                        val segmentResultTimeRange = if (usesSegmentLevelResult()) {
                             SegmentTimeRange(vadSegment.startTime, vadSegment.endTime)
                         } else {
                             null
@@ -390,9 +390,9 @@ class WhisperRecognizer(
                         val recognizedSegments = recognizeSegment(
                             audioData = segmentData,
                             startTimeMs = recognitionStartTimeMs,
-                            ctcTimeRange = ctcTimeRange
+                            segmentResultTimeRange = segmentResultTimeRange
                         )
-                        val segments = if (ctcTimeRange == null) {
+                        val segments = if (segmentResultTimeRange == null) {
                             // 先以 padding 后窗口为原点换算 token 时间，再回收至原始 VAD 时间轴。
                             constrainToVadRange(recognizedSegments, vadSegment)
                         } else {
@@ -448,7 +448,7 @@ class WhisperRecognizer(
                         val segments = recognizeSegment(
                             audioData = segmentData,
                             startTimeMs = startTimeMs,
-                            ctcTimeRange = if (isParakeetCtc()) {
+                            segmentResultTimeRange = if (usesSegmentLevelResult()) {
                                 SegmentTimeRange(startTimeMs, endTimeMs)
                             } else {
                                 null
@@ -489,7 +489,7 @@ class WhisperRecognizer(
     private fun recognizeSegment(
         audioData: FloatArray,
         startTimeMs: Long,
-        ctcTimeRange: SegmentTimeRange? = null
+        segmentResultTimeRange: SegmentTimeRange? = null
     ): List<SubtitleSegment> {
         val segments = mutableListOf<SubtitleSegment>()
 
@@ -530,18 +530,18 @@ class WhisperRecognizer(
             Log.d(TAG, "识别结果: $text")
 
             if (text.isNotEmpty()) {
-                if (isParakeetCtc() && ctcTimeRange != null) {
+                if (usesSegmentLevelResult() && segmentResultTimeRange != null) {
                     segments.add(
                         SubtitleSegment(
-                            startTime = ctcTimeRange.startTimeMs,
-                            endTime = ctcTimeRange.endTimeMs,
+                            startTime = segmentResultTimeRange.startTimeMs,
+                            endTime = segmentResultTimeRange.endTimeMs,
                             text = text
                         )
                     )
                     Log.d(
                         TAG,
-                        "Parakeet CTC 段级结果: ${ctcTimeRange.startTimeMs}ms - " +
-                            "${ctcTimeRange.endTimeMs}ms, 文本: ${text.take(50)}..."
+                        "段级识别结果: ${segmentResultTimeRange.startTimeMs}ms - " +
+                            "${segmentResultTimeRange.endTimeMs}ms, 文本: ${text.take(50)}..."
                     )
                 } else {
                     // Whisper 返回的时间戳是相对于当前段的
@@ -678,7 +678,7 @@ class WhisperRecognizer(
                                     recognitionWindow.sampleCount
                                 ),
                                 recognitionStartMs,
-                                ctcTimeRange = if (isParakeetCtc()) {
+                                segmentResultTimeRange = if (usesSegmentLevelResult()) {
                                     SegmentTimeRange(startMs, endMs)
                                 } else {
                                     null
@@ -793,10 +793,12 @@ class WhisperRecognizer(
 
     private fun isParakeetCtc(): Boolean = modelType == SettingsManager.ASR_MODEL_PARAKEET_CTC_JA
 
+    private fun isParakeet(): Boolean = isParakeetTdt() || isParakeetCtc()
+
+    private fun usesSegmentLevelResult(): Boolean = isSenseVoice() || isParakeet()
+
     private fun shouldUseDynamicPadding(): Boolean =
-        !isParakeetTdt() &&
-            !isParakeetCtc() &&
-            settingsManager().isSpeechVadDynamicPaddingEnabled()
+        settingsManager().isSpeechVadDynamicPaddingEnabled()
 
     private fun isSingleFileModel(): Boolean = isSenseVoice() || isParakeetCtc()
 

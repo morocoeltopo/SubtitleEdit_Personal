@@ -691,17 +691,7 @@ class SpeechToSubtitleActivity : AppCompatActivity() {
         if (shouldUseVad()) {
             appendRuntimeLog("  VAD 模型：${if (settingsManager.isVadUseBuiltInModel()) "内置 silero_vad.onnx" else displayModelPath(vadModelPath)}")
             appendRuntimeLog("  VAD 阈值：${settingsManager.getVadThreshold()}，最小静音：${settingsManager.getVadMinSilenceDuration()}s，最小语音：${settingsManager.getVadMinSpeechDuration()}s，最大语音：${settingsManager.getVadMaxSpeechDuration()}s")
-            val dynamicPaddingStatus = if (
-                modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT ||
-                modelType == SettingsManager.ASR_MODEL_PARAKEET_CTC_JA
-            ) {
-                "不适用（TDT/CTC 模型）"
-            } else if (settingsManager.isSpeechVadDynamicPaddingEnabled()) {
-                "启用（前后最多各 500ms）"
-            } else {
-                "关闭"
-            }
-            appendRuntimeLog("  动态 Padding：$dynamicPaddingStatus")
+            appendRuntimeLog("  动态 Padding：${if (settingsManager.isSpeechVadDynamicPaddingEnabled()) "启用（前后最多各 500ms）" else "关闭"}")
         }
         if (modelType == SettingsManager.ASR_MODEL_WHISPER || modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT) {
             appendRuntimeLog("  热词：${if (settingsManager.isSpeechHotwordsEnabled()) "启用，权重 ${settingsManager.getSpeechHotwordsScore()}" else "未启用"}")
