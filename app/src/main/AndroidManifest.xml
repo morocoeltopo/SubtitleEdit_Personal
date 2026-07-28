@@ -58,6 +58,11 @@
             android:exported="false"
             android:theme="@style/Theme.SubtitleEditforAndroid"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+        <activity
+            android:name=".ArchivePreviewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SubtitleEditforAndroid" />
             
         <activity
             android:name=".BatchConvertActivity"

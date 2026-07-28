@@ -31,6 +31,7 @@ import com.subtitleedit.databinding.DialogArchivePasswordBinding
 import com.subtitleedit.databinding.DialogArchiveConflictBinding
 import com.subtitleedit.databinding.DialogCreateArchiveBinding
 import com.subtitleedit.util.ArchiveManager
+import com.subtitleedit.util.ArchivePreviewCache
 import com.subtitleedit.util.ArchivePasswordVault
 import com.subtitleedit.model.ArchiveConflictDialogFormatter
 import com.subtitleedit.model.ArchiveConflictDialogModel
@@ -954,7 +955,10 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) {
                     runCatching {
                         when (action) {
-                            ArchiveAction.PREVIEW -> ArchiveManager.listEntries(archive, passwordChars)
+                            ArchiveAction.PREVIEW -> {
+                                val entries = ArchiveManager.listEntries(archive, passwordChars)
+                                ArchivePreviewCache.write(this@MainActivity, entries)
+                            }
                             ArchiveAction.TEST -> ArchiveManager.testArchive(archive, passwordChars)
                             ArchiveAction.EXTRACT_CURRENT -> error("不应直接执行解压操作")
                         }
@@ -966,10 +970,8 @@ class MainActivity : AppCompatActivity() {
             }
             result.onSuccess { value ->
                 when (action) {
-                    ArchiveAction.PREVIEW -> showArchivePreview(
-                        archive,
-                        @Suppress("UNCHECKED_CAST") (value as List<ArchiveManager.EntryInfo>),
-                        password
+                    ArchiveAction.PREVIEW -> startActivity(
+                        ArchivePreviewActivity.createIntent(this@MainActivity, archive.name, value as File)
                     )
                     ArchiveAction.EXTRACT_CURRENT -> Unit
                     ArchiveAction.TEST -> {
@@ -996,35 +998,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-    }
-
-    private fun showArchivePreview(
-        archive: File,
-        entries: List<ArchiveManager.EntryInfo>,
-        password: String?
-    ) {
-        val maxVisibleEntries = 300
-        val labels = entries.take(maxVisibleEntries).map { entry ->
-            if (entry.isDirectory) {
-                "[目录] ${entry.name}"
-            } else {
-                val size = if (entry.size >= 0L) FileUtils.formatFileSize(entry.size) else "大小未知"
-                "${entry.name}  ($size)"
-            }
-        }.toMutableList()
-        if (entries.size > maxVisibleEntries) {
-            labels += "... 另有 ${entries.size - maxVisibleEntries} 项"
-        }
-        AlertDialog.Builder(this)
-            .setTitle("解压预览（${entries.size} 项）")
-            .apply {
-                if (labels.isEmpty()) setMessage("压缩包为空") else setItems(labels.toTypedArray(), null)
-            }
-            .setPositiveButton("确定", null)
-            .setNeutralButton("解压到当前文件夹") { _, _ ->
-                runArchiveAction(archive, ArchiveAction.EXTRACT_CURRENT, password)
-            }
-            .show()
     }
 
     private fun startExtractDestinationSelection(archive: File) {
