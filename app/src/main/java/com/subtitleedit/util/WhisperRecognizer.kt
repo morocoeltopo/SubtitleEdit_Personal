@@ -61,6 +61,11 @@ class WhisperRecognizer(
         val sampleCount: Int
     )
 
+    private data class SegmentTimeRange(
+        val startTimeMs: Long,
+        val endTimeMs: Long
+    )
+
     /**
      * 初始化识别器
      */
@@ -340,7 +345,7 @@ class WhisperRecognizer(
                 }
 
                 if (vadSegments != null) {
-                    val dynamicPaddingEnabled = settingsManager().isSpeechVadDynamicPaddingEnabled()
+                    val dynamicPaddingEnabled = shouldUseDynamicPadding()
                     Log.d(TAG, "VAD 动态 padding：${if (dynamicPaddingEnabled) "启用" else "关闭"}")
                     // 对每个语音段进行识别
                     for ((index, vadSegment) in vadSegments.withIndex()) {
@@ -377,11 +382,22 @@ class WhisperRecognizer(
                             sampleCount = recognitionWindow.sampleCount
                         )
 
-                        // 先以 padding 后窗口为原点换算 token 时间，再回收至原始 VAD 时间轴。
-                        val segments = constrainToVadRange(
-                            recognizeSegment(segmentData, recognitionStartTimeMs),
-                            vadSegment
+                        val ctcTimeRange = if (isParakeetCtc()) {
+                            SegmentTimeRange(vadSegment.startTime, vadSegment.endTime)
+                        } else {
+                            null
+                        }
+                        val recognizedSegments = recognizeSegment(
+                            audioData = segmentData,
+                            startTimeMs = recognitionStartTimeMs,
+                            ctcTimeRange = ctcTimeRange
                         )
+                        val segments = if (ctcTimeRange == null) {
+                            // 先以 padding 后窗口为原点换算 token 时间，再回收至原始 VAD 时间轴。
+                            constrainToVadRange(recognizedSegments, vadSegment)
+                        } else {
+                            recognizedSegments
+                        }
                         allSegments.addAll(segments)
 
                         // 实时返回识别结果
@@ -418,6 +434,7 @@ class WhisperRecognizer(
                         val segmentData = reader.readRange(startSample, sampleCount)
 
                         val startTimeMs = (startSample * 1000L) / SAMPLE_RATE
+                        val endTimeMs = (endSample * 1000L) / SAMPLE_RATE
 
                         progressCallback(
                             (i * 100) / segmentCount,
@@ -428,7 +445,15 @@ class WhisperRecognizer(
                         Log.d(TAG, "识别第 ${i + 1}/$segmentCount 段 (${startTimeMs}ms - ${(endSample * 1000L) / SAMPLE_RATE}ms)")
 
                         // 识别当前段
-                        val segments = recognizeSegment(segmentData, startTimeMs)
+                        val segments = recognizeSegment(
+                            audioData = segmentData,
+                            startTimeMs = startTimeMs,
+                            ctcTimeRange = if (isParakeetCtc()) {
+                                SegmentTimeRange(startTimeMs, endTimeMs)
+                            } else {
+                                null
+                            }
+                        )
                         allSegments.addAll(segments)
 
                         // 如果识别到内容，立即通过回调返回
@@ -463,7 +488,8 @@ class WhisperRecognizer(
      */
     private fun recognizeSegment(
         audioData: FloatArray,
-        startTimeMs: Long
+        startTimeMs: Long,
+        ctcTimeRange: SegmentTimeRange? = null
     ): List<SubtitleSegment> {
         val segments = mutableListOf<SubtitleSegment>()
 
@@ -504,66 +530,81 @@ class WhisperRecognizer(
             Log.d(TAG, "识别结果: $text")
 
             if (text.isNotEmpty()) {
-                // Whisper 返回的时间戳是相对于当前段的
-                val tokens = result.tokens
-                val timestamps = result.timestamps
-
-                Log.d(TAG, "Token 数量: ${tokens.size}, 时间戳数量: ${timestamps.size}")
-
-                if (tokens.isNotEmpty() && timestamps.isNotEmpty() && tokens.size == timestamps.size) {
-                    // 如果有详细的 token 时间戳，使用它们
-                    Log.d(TAG, "使用 token 时间戳进行分段")
-                    var currentText = StringBuilder()
-                    var segmentStart = startTimeMs
-
-                    for (j in tokens.indices) {
-                        val token = tokens[j]
-                        currentText.append(token)
-
-                        // 检查是否是句子结束
-                        if (token.endsWith(".") || token.endsWith("。") ||
-                            token.endsWith("?") || token.endsWith("？") ||
-                            token.endsWith("!") || token.endsWith("！") ||
-                            j == tokens.size - 1) {
-
-                            // timestamps 是秒为单位，转换为毫秒
-                            val segmentEnd = startTimeMs + (timestamps[j] * 1000).toLong()
-
-                            val segmentText = currentText.toString().trim()
-                            if (segmentText.isNotEmpty()) {
-                                segments.add(SubtitleSegment(
-                                    startTime = segmentStart,
-                                    endTime = segmentEnd,
-                                    text = segmentText
-                                ))
-                                Log.d(TAG, "添加字幕段: ${segmentStart}ms - ${segmentEnd}ms, 文本: ${segmentText.take(50)}...")
-                            }
-
-                            currentText = StringBuilder()
-                            segmentStart = segmentEnd
-                        }
-                    }
+                if (isParakeetCtc() && ctcTimeRange != null) {
+                    segments.add(
+                        SubtitleSegment(
+                            startTime = ctcTimeRange.startTimeMs,
+                            endTime = ctcTimeRange.endTimeMs,
+                            text = text
+                        )
+                    )
+                    Log.d(
+                        TAG,
+                        "Parakeet CTC 段级结果: ${ctcTimeRange.startTimeMs}ms - " +
+                            "${ctcTimeRange.endTimeMs}ms, 文本: ${text.take(50)}..."
+                    )
                 } else {
-                    // 没有详细时间戳，按句子手动分割
-                    Log.d(TAG, "没有 token 时间戳，按句子手动分割")
-                    val sentences = splitIntoSentences(text)
-                    val totalDuration = (audioData.size * 1000L) / SAMPLE_RATE
-                    val avgDurationPerChar = totalDuration.toFloat() / text.length
+                    // Whisper 返回的时间戳是相对于当前段的
+                    val tokens = result.tokens
+                    val timestamps = result.timestamps
 
-                    var currentTime = startTimeMs
-                    for (sentence in sentences) {
-                        if (sentence.isNotEmpty()) {
-                            val duration = (sentence.length * avgDurationPerChar).toLong()
-                            val endTime = currentTime + duration
+                    Log.d(TAG, "Token 数量: ${tokens.size}, 时间戳数量: ${timestamps.size}")
 
-                            segments.add(SubtitleSegment(
-                                startTime = currentTime,
-                                endTime = endTime,
-                                text = sentence
-                            ))
-                            Log.d(TAG, "添加字幕段: ${currentTime}ms - ${endTime}ms, 文本: ${sentence.take(50)}...")
+                    if (tokens.isNotEmpty() && timestamps.isNotEmpty() && tokens.size == timestamps.size) {
+                        // 如果有详细的 token 时间戳，使用它们
+                        Log.d(TAG, "使用 token 时间戳进行分段")
+                        var currentText = StringBuilder()
+                        var segmentStart = startTimeMs
 
-                            currentTime = endTime
+                        for (j in tokens.indices) {
+                            val token = tokens[j]
+                            currentText.append(token)
+
+                            // 检查是否是句子结束
+                            if (token.endsWith(".") || token.endsWith("。") ||
+                                token.endsWith("?") || token.endsWith("？") ||
+                                token.endsWith("!") || token.endsWith("！") ||
+                                j == tokens.size - 1) {
+
+                                // timestamps 是秒为单位，转换为毫秒
+                                val segmentEnd = startTimeMs + (timestamps[j] * 1000).toLong()
+
+                                val segmentText = currentText.toString().trim()
+                                if (segmentText.isNotEmpty()) {
+                                    segments.add(SubtitleSegment(
+                                        startTime = segmentStart,
+                                        endTime = segmentEnd,
+                                        text = segmentText
+                                    ))
+                                    Log.d(TAG, "添加字幕段: ${segmentStart}ms - ${segmentEnd}ms, 文本: ${segmentText.take(50)}...")
+                                }
+
+                                currentText = StringBuilder()
+                                segmentStart = segmentEnd
+                            }
+                        }
+                    } else {
+                        // 没有详细时间戳，按句子手动分割
+                        Log.d(TAG, "没有 token 时间戳，按句子手动分割")
+                        val sentences = splitIntoSentences(text)
+                        val totalDuration = (audioData.size * 1000L) / SAMPLE_RATE
+                        val avgDurationPerChar = totalDuration.toFloat() / text.length
+
+                        var currentTime = startTimeMs
+                        for (sentence in sentences) {
+                            if (sentence.isNotEmpty()) {
+                                val duration = (sentence.length * avgDurationPerChar).toLong()
+                                val endTime = currentTime + duration
+
+                                segments.add(SubtitleSegment(
+                                    startTime = currentTime,
+                                    endTime = endTime,
+                                    text = sentence
+                                ))
+                                Log.d(TAG, "添加字幕段: ${currentTime}ms - ${endTime}ms, 文本: ${sentence.take(50)}...")
+
+                                currentTime = endTime
+                            }
                         }
                     }
                 }
@@ -593,7 +634,7 @@ class WhisperRecognizer(
 
             val texts = mutableListOf<String>()
             Pcm16WavReader(audioFile).use { reader ->
-                val dynamicPaddingEnabled = settingsManager().isSpeechVadDynamicPaddingEnabled()
+                val dynamicPaddingEnabled = shouldUseDynamicPadding()
                 val sampleRanges = ranges.map { range ->
                     val startMs = range.first.coerceAtLeast(0L)
                     val endMs = range.last.coerceAtLeast(startMs)
@@ -636,7 +677,12 @@ class WhisperRecognizer(
                                     recognitionWindow.startSample,
                                     recognitionWindow.sampleCount
                                 ),
-                                recognitionStartMs
+                                recognitionStartMs,
+                                ctcTimeRange = if (isParakeetCtc()) {
+                                    SegmentTimeRange(startMs, endMs)
+                                } else {
+                                    null
+                                }
                             ),
                             rangeStartTime = startMs,
                             rangeEndTime = endMs
@@ -746,6 +792,11 @@ class WhisperRecognizer(
     private fun isParakeetTdt(): Boolean = modelType == SettingsManager.ASR_MODEL_PARAKEET_TDT
 
     private fun isParakeetCtc(): Boolean = modelType == SettingsManager.ASR_MODEL_PARAKEET_CTC_JA
+
+    private fun shouldUseDynamicPadding(): Boolean =
+        !isParakeetTdt() &&
+            !isParakeetCtc() &&
+            settingsManager().isSpeechVadDynamicPaddingEnabled()
 
     private fun isSingleFileModel(): Boolean = isSenseVoice() || isParakeetCtc()
 
