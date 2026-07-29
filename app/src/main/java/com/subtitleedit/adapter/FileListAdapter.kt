@@ -31,7 +31,8 @@ import java.util.concurrent.Executors
  */
 class FileListAdapter(
     private val onItemClick: (File) -> Unit,
-    private val onItemLongClick: (File) -> Unit
+    private val onItemLongClick: (File) -> Unit,
+    private val isItemRestricted: (File) -> Boolean = { false }
 ) : ListAdapter<File, FileListAdapter.FileViewHolder>(FileDiffCallback()) {
 
     private companion object {
@@ -56,6 +57,8 @@ class FileListAdapter(
     }
     private val mediaDurationCache = ConcurrentHashMap<String, String>()
     private val pendingDurationKeys = ConcurrentHashMap.newKeySet<String>()
+    private val directoryItemCountCache = ConcurrentHashMap<String, Int>()
+    private val pendingDirectoryCountKeys = ConcurrentHashMap.newKeySet<String>()
     private val modifiedTimeFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     fun updateSelection(selectionMode: Boolean, selectedPaths: Set<String>) {
@@ -86,21 +89,31 @@ class FileListAdapter(
         private val iconPadding = (8 * itemView.resources.displayMetrics.density + 0.5f).toInt()
 
         fun bind(file: File) {
+            val isRestricted = isItemRestricted(file)
             val thumbnailKey = thumbnailKey(file)
             ivFileIcon.tag = thumbnailKey
             ivFileIcon.scaleType = ImageView.ScaleType.FIT_CENTER
             ivFileIcon.setPadding(iconPadding, iconPadding, iconPadding, iconPadding)
+            ivFileIcon.clearColorFilter()
 
             // 设置图标
             if (file.isDirectory) {
                 ivFileIcon.setImageResource(R.drawable.ic_folder)
-                fileDetailsRow.visibility = View.GONE
                 tvMediaDuration.tag = null
                 tvMediaDuration.visibility = View.GONE
                 tvFileExtension.visibility = View.GONE
                 tvFileModifiedTime.visibility = View.GONE
+                if (isRestricted || file.name == "..") {
+                    fileDetailsRow.visibility = View.GONE
+                    tvFileSize.tag = null
+                    tvFileSize.visibility = View.GONE
+                } else {
+                    fileDetailsRow.visibility = View.VISIBLE
+                    bindDirectoryItemCount(file, thumbnailKey)
+                }
             } else {
                 fileDetailsRow.visibility = View.VISIBLE
+                tvFileSize.tag = null
                 val extension = file.extension.lowercase()
                 if (extension in IMAGE_EXTENSIONS) {
                     bindImageThumbnail(file, thumbnailKey)
@@ -137,6 +150,20 @@ class FileListAdapter(
 
             // 设置文件名
             tvFileName.text = file.name
+            tvFileName.setTextColor(
+                androidx.core.content.ContextCompat.getColor(
+                    itemView.context,
+                    if (isRestricted) R.color.on_surface_variant else R.color.on_surface
+                )
+            )
+            if (isRestricted) {
+                ivFileIcon.setColorFilter(
+                    androidx.core.content.ContextCompat.getColor(
+                        itemView.context,
+                        R.color.on_surface_variant
+                    )
+                )
+            }
             val isSelected = file.absolutePath in selectedPaths
             card.strokeWidth = if (isSelected) 2 else 0
             card.strokeColor = if (isSelected) {
@@ -144,16 +171,55 @@ class FileListAdapter(
             } else {
                 android.graphics.Color.TRANSPARENT
             }
-            itemView.alpha = if (selectionMode && !isSelected && file.name != "..") 0.72f else 1f
+            itemView.alpha = when {
+                isRestricted -> 0.55f
+                selectionMode && !isSelected && file.name != ".." -> 0.72f
+                else -> 1f
+            }
 
             // 点击事件
             itemView.setOnClickListener {
                 onItemClick(file)
             }
             itemView.setOnLongClickListener {
-                onItemLongClick(file)
+                if (isRestricted) onItemClick(file) else onItemLongClick(file)
                 true
             }
+        }
+
+        private fun bindDirectoryItemCount(file: File, cacheKey: String) {
+            tvFileSize.tag = cacheKey
+            directoryItemCountCache[cacheKey]?.let { count ->
+                showDirectoryItemCount(count)
+                return
+            }
+
+            tvFileSize.text = ""
+            tvFileSize.visibility = View.INVISIBLE
+            if (!pendingDirectoryCountKeys.add(cacheKey)) return
+
+            thumbnailExecutor.execute {
+                val count = runCatching { file.list()?.size ?: -1 }.getOrDefault(-1)
+                directoryItemCountCache[cacheKey] = count
+                pendingDirectoryCountKeys.remove(cacheKey)
+                mainHandler.post {
+                    if (tvFileSize.tag == cacheKey) {
+                        showDirectoryItemCount(count)
+                    } else {
+                        val position = currentList.indexOfFirst { thumbnailKey(it) == cacheKey }
+                        if (position >= 0) notifyItemChanged(position)
+                    }
+                }
+            }
+        }
+
+        private fun showDirectoryItemCount(count: Int) {
+            tvFileSize.text = when {
+                count < 0 -> ""
+                count == 0 -> itemView.context.getString(R.string.directory_empty)
+                else -> itemView.context.getString(R.string.directory_item_count, count)
+            }
+            tvFileSize.visibility = if (count < 0) View.GONE else View.VISIBLE
         }
 
         private fun bindMediaDuration(file: File) {

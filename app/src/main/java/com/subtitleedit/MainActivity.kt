@@ -246,7 +246,8 @@ class MainActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         fileAdapter = FileListAdapter(
             onItemClick = ::onFileClicked,
-            onItemLongClick = ::enterSelectionMode
+            onItemLongClick = ::enterSelectionMode,
+            isItemRestricted = ::isRestrictedAndroidDirectory
         )
         
         binding.rvFileList.apply {
@@ -425,6 +426,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        if (isRestrictedAndroidDirectory(file)) {
+            showShortToast(getString(R.string.android_directory_access_denied))
+            return
+        }
+
         if (pendingFileOperation != null) {
             if (file.isDirectory) {
                 navigateDestinationInto(file)
@@ -463,6 +469,20 @@ class MainActivity : AppCompatActivity() {
         } else {
             com.subtitleedit.util.OverwritingToast.makeText(this, "不支持的文件格式", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun isRestrictedAndroidDirectory(file: File): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+            !file.isDirectory ||
+            !file.name.equals("Android", ignoreCase = true)
+        ) {
+            return false
+        }
+
+        val storageRoot = Environment.getExternalStorageDirectory()
+        val parentPath = runCatching { file.parentFile?.canonicalPath }.getOrNull()
+        val storageRootPath = runCatching { storageRoot.canonicalPath }.getOrNull()
+        return parentPath != null && parentPath == storageRootPath
     }
 
     private fun enterSelectionMode(file: File) {

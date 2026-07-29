@@ -131,6 +131,9 @@
     <string name="activity_main_text_02">当前目录</string>
     <string name="activity_main_text_03">复制到此处</string>
     <string name="activity_main_text_04">上一级</string>
+    <string name="android_directory_access_denied">无法访问该目录</string>
+    <string name="directory_empty">空的</string>
+    <string name="directory_item_count">%1$d项</string>
     <string name="activity_media_convert_text_01">源文件</string>
     <string name="activity_media_convert_text_02">选择音视频文件</string>
     <string name="activity_media_convert_text_03">未选择文件</string>
