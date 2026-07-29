@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="nav_directory">目录</string>
+    <string name="nav_favorites">常用目录</string>
+    <string name="file_search_hint">搜索当前目录</string>
+    <string name="file_management_settings">文件管理设置</string>
     <string name="app_name">SubtitleEdit</string>
     <string name="about">关于</string>
     <string name="version_format">版本 %1$s</string>

@@ -1,6 +1,8 @@
 package com.subtitleedit
 
 import androidx.lifecycle.ViewModel
+import com.subtitleedit.model.FileSortDirection
+import com.subtitleedit.model.FileSortField
 import java.io.File
 
 internal enum class FileOperation { COPY, MOVE, EXTRACT }
@@ -17,4 +19,8 @@ internal class MainViewModel : ViewModel() {
     var pendingFileOperation: FileOperation? = null
     var pendingArchiveFile: File? = null
     val destinationNavigationHistory = mutableListOf<DestinationNavigationState>()
+    var searchQuery: String = ""
+    var selectedTopLevelItem: Int = com.subtitleedit.R.id.nav_directory
+    var sortField: FileSortField? = null
+    var sortDirection: FileSortDirection? = null
 }

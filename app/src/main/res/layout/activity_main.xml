@@ -1,31 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
+    android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <com.google.android.material.appbar.AppBarLayout
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fitsSystemWindows="true">
+        android:layout_height="?attr/actionBarSize"
+        app:title="@string/nav_directory" />
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            app:title="@string/app_name" />
-
-    </com.google.android.material.appbar.AppBarLayout>
+    <FrameLayout
+        android:id="@+id/contentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
     <LinearLayout
+        android:id="@+id/directoryContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        android:visibility="visible">
 
         <!-- 路径导航栏 -->
         <HorizontalScrollView
@@ -258,38 +258,33 @@
 
         </LinearLayout>
 
-        <!-- 底部按钮栏 -->
-        <com.google.android.material.divider.MaterialDivider
-            android:layout_width="match_parent"
-            android:layout_height="1dp" />
-
-        <LinearLayout
-            android:id="@+id/normalBottomActions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="8dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnUpLevel"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="4dp"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:text="@string/activity_main_text_04" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnDrafts"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="4dp"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:text="@string/drafts" />
-
-        </LinearLayout>
-
     </LinearLayout>
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/fragmentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+    </FrameLayout>
+
+    <com.google.android.material.divider.MaterialDivider
+        android:id="@+id/bottomDivider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp" />
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNavigation"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:minHeight="0dp"
+        android:background="@color/surface"
+        app:itemActiveIndicatorStyle="@null"
+        app:itemIconTint="@color/bottom_navigation_item"
+        app:itemPaddingBottom="4dp"
+        app:itemPaddingTop="4dp"
+        app:itemTextColor="@color/bottom_navigation_item"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/menu_bottom_navigation" />
+
+</LinearLayout>

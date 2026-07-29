@@ -28,6 +28,8 @@ class SettingsManager private constructor(context: Context) {
         private const val KEY_LOOP_SELECTED_SUBTITLE = "loop_selected_subtitle"
         private const val KEY_SHOW_ALL_FILE_TYPES = "show_all_file_types"
         private const val KEY_SHOW_HIDDEN_FILES = "show_hidden_files"
+        private const val KEY_FILE_SORT_FIELD = "file_sort_field"
+        private const val KEY_FILE_SORT_DIRECTION = "file_sort_direction"
         private const val KEY_CHECK_UPDATES_ON_STARTUP = "check_updates_on_startup"
         private const val KEY_WHISPER_ENCODER_PATH = "whisper_encoder_path"
         private const val KEY_WHISPER_DECODER_PATH = "whisper_decoder_path"
@@ -562,6 +564,27 @@ class SettingsManager private constructor(context: Context) {
 
     fun setShowHiddenFilesEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_SHOW_HIDDEN_FILES, enabled).apply()
+    }
+
+    fun getFileSortField(): com.subtitleedit.model.FileSortField = runCatching {
+        com.subtitleedit.model.FileSortField.valueOf(
+            prefs.getString(KEY_FILE_SORT_FIELD, null) ?: com.subtitleedit.model.FileSortField.NAME.name
+        )
+    }.getOrDefault(com.subtitleedit.model.FileSortField.NAME)
+
+    fun setFileSortField(field: com.subtitleedit.model.FileSortField) {
+        prefs.edit().putString(KEY_FILE_SORT_FIELD, field.name).apply()
+    }
+
+    fun getFileSortDirection(): com.subtitleedit.model.FileSortDirection = runCatching {
+        com.subtitleedit.model.FileSortDirection.valueOf(
+            prefs.getString(KEY_FILE_SORT_DIRECTION, null)
+                ?: com.subtitleedit.model.FileSortDirection.ASCENDING.name
+        )
+    }.getOrDefault(com.subtitleedit.model.FileSortDirection.ASCENDING)
+
+    fun setFileSortDirection(direction: com.subtitleedit.model.FileSortDirection) {
+        prefs.edit().putString(KEY_FILE_SORT_DIRECTION, direction.name).apply()
     }
 
     /** 空字符串表示跟随系统默认 TTS 引擎。 */

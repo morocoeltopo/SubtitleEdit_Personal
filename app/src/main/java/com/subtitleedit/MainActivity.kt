@@ -2,6 +2,7 @@ package com.subtitleedit
 
 import android.Manifest
 import android.content.ClipData
+import android.content.res.ColorStateList
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.MediaExtractor
@@ -20,6 +21,7 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
@@ -29,6 +31,8 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.widget.SearchView
+import androidx.appcompat.widget.AppCompatRadioButton
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
@@ -45,6 +49,9 @@ import com.subtitleedit.util.ArchivePasswordVault
 import com.subtitleedit.model.ArchiveConflictDialogFormatter
 import com.subtitleedit.model.ArchiveConflictDialogModel
 import com.subtitleedit.model.ArchiveConflictFileMetadata
+import com.subtitleedit.model.FileBrowserOrder
+import com.subtitleedit.model.FileSortDirection
+import com.subtitleedit.model.FileSortField
 import com.subtitleedit.util.FileUtils
 import com.subtitleedit.util.SettingsManager
 import com.subtitleedit.util.UpdateChecker
@@ -71,6 +78,9 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val MENU_SELECT_ALL = 0x10001
         const val MENU_SELECT_RANGE = 0x10002
+        const val MENU_SEARCH = 0x10003
+        const val MENU_CREATE = 0x10004
+        const val MENU_MORE = 0x10005
         const val CONFLICT_WAIT_INTERVAL_MS = 250L
         const val DIRECTORY_REFRESH_DELAY_MS = 250L
         val DIRECTORY_CHANGE_EVENTS = FileObserver.CREATE or FileObserver.DELETE or
@@ -91,6 +101,7 @@ class MainActivity : AppCompatActivity() {
         set(value) { stateModel.currentDirectory = value }
     private val directoryHistory get() = stateModel.directoryHistory
     private val visibleFiles = mutableListOf<File>()
+    private val directoryFiles = mutableListOf<File>()
     private val selectedPaths get() = stateModel.selectedPaths
     private var pendingFileOperation: FileOperation?
         get() = stateModel.pendingFileOperation
@@ -104,6 +115,12 @@ class MainActivity : AppCompatActivity() {
     private var updateDialogShown = false
     private var showAllFileTypes = false
     private var showHiddenFiles = false
+    private var sortField: FileSortField
+        get() = stateModel.sortField ?: FileSortField.NAME
+        set(value) { stateModel.sortField = value }
+    private var sortDirection: FileSortDirection
+        get() = stateModel.sortDirection ?: FileSortDirection.ASCENDING
+        set(value) { stateModel.sortDirection = value }
     private val directoryRefreshHandler = Handler(Looper.getMainLooper())
     private var directoryObserver: FileObserver? = null
     private var observedDirectoryPath: String? = null
@@ -133,6 +150,11 @@ class MainActivity : AppCompatActivity() {
     )
 
     private data class PropertyDetail(val label: String, val value: String)
+
+    private data class SortOptionRow(
+        val container: LinearLayout,
+        val radioButton: AppCompatRadioButton
+    )
 
     // 权限请求
     private val permissionLauncher = registerForActivityResult(
@@ -173,10 +195,13 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         showAllFileTypes = settingsManager.isShowAllFileTypesEnabled()
         showHiddenFiles = settingsManager.isShowHiddenFilesEnabled()
+        if (stateModel.sortField == null) sortField = settingsManager.getFileSortField()
+        if (stateModel.sortDirection == null) sortDirection = settingsManager.getFileSortDirection()
         
         setupToolbar()
         setupRecyclerView()
         setupButtons()
+        setupBottomNavigation()
         checkPermissions()
     }
 
@@ -187,7 +212,7 @@ class MainActivity : AppCompatActivity() {
         val newShowHiddenFiles = SettingsManager.getInstance(this).isShowHiddenFilesEnabled()
         showAllFileTypes = newShowAllFileTypes
         showHiddenFiles = newShowHiddenFiles
-        currentDirectory?.let(::loadDirectory)
+        if (stateModel.selectedTopLevelItem == R.id.nav_directory) currentDirectory?.let(::loadDirectory)
         pendingUpdate?.let(::showPendingUpdate)
         if (!updateCheckStarted && SettingsManager.getInstance(this).shouldCheckUpdatesOnStartup()) {
             updateCheckStarted = true
@@ -217,13 +242,14 @@ class MainActivity : AppCompatActivity() {
     
     private fun setupToolbar() {
         setSupportActionBar(binding.toolbar)
-        supportActionBar?.title = getString(R.string.app_name)
+        supportActionBar?.title = getString(R.string.nav_directory)
     }
     
     override fun onCreateOptionsMenu(menu: Menu): Boolean = true
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
         menu.clear()
+        if (stateModel.selectedTopLevelItem != R.id.nav_directory) return true
         if (selectedPaths.isNotEmpty() || pendingFileOperation != null) {
             if (pendingFileOperation == null) {
                 menu.add(Menu.NONE, MENU_SELECT_ALL, 0, "全选")
@@ -238,7 +264,16 @@ class MainActivity : AppCompatActivity() {
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             }
         } else {
-            menuInflater.inflate(R.menu.menu_main, menu)
+            val searchItem = menu.add(Menu.NONE, MENU_SEARCH, 0, R.string.menu_search)
+                .setIcon(R.drawable.ic_search)
+            searchItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS or MenuItem.SHOW_AS_ACTION_COLLAPSE_ACTION_VIEW)
+            configureSearchItem(searchItem)
+            menu.add(Menu.NONE, MENU_CREATE, 1, R.string.menu_new)
+                .setIcon(R.drawable.ic_add)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(Menu.NONE, MENU_MORE, 2, R.string.activity_main_text_01)
+                .setIcon(R.drawable.ic_more_vertical)
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         }
         return true
     }
@@ -252,12 +287,12 @@ class MainActivity : AppCompatActivity() {
             selectRangeBetweenSelectedFiles()
             true
         }
-        R.id.menu_tools -> {
-            startActivity(Intent(this, ToolsActivity::class.java))
+        MENU_CREATE -> {
+            showCreateMenu()
             true
         }
-        R.id.menu_settings -> {
-            startActivity(Intent(this, SettingsActivity::class.java))
+        MENU_MORE -> {
+            showDirectoryMoreMenu()
             true
         }
         else -> super.onOptionsItemSelected(item)
@@ -277,14 +312,6 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun setupButtons() {
-        binding.btnUpLevel.setOnClickListener {
-            if (pendingFileOperation != null) navigateDestinationUp() else goUpLevel()
-        }
-        
-        binding.btnDrafts.setOnClickListener {
-            openDrafts()
-        }
-
         binding.btnCopySelected.setOnClickListener { startDestinationSelection(FileOperation.COPY) }
         binding.btnMoveSelected.setOnClickListener { startDestinationSelection(FileOperation.MOVE) }
         binding.btnRenameSelected.setOnClickListener { renameSelectedFile() }
@@ -295,12 +322,296 @@ class MainActivity : AppCompatActivity() {
             cancelDestinationSelection()
         }
     }
-    
-    private fun openDrafts() {
-        val intent = Intent(this, DraftsActivity::class.java)
-        intent.putExtra(DraftsActivity.EXTRA_FROM_EDITOR, false)
-        startActivity(intent)
+
+    private fun setupBottomNavigation() {
+        binding.bottomNavigation.selectedItemId = stateModel.selectedTopLevelItem
+        binding.bottomNavigation.setOnItemSelectedListener { item ->
+            showTopLevelPage(item.itemId)
+            true
+        }
+        showTopLevelPage(stateModel.selectedTopLevelItem)
     }
+
+    private fun showTopLevelPage(itemId: Int) {
+        stateModel.selectedTopLevelItem = itemId
+        val directorySelected = itemId == R.id.nav_directory
+        binding.directoryContent.visibility = if (directorySelected) View.VISIBLE else View.GONE
+        binding.fragmentContainer.visibility = if (directorySelected) View.GONE else View.VISIBLE
+        binding.toolbar.navigationIcon = null
+        binding.toolbar.setNavigationOnClickListener(null)
+
+        if (directorySelected) {
+            supportActionBar?.title = getString(R.string.nav_directory)
+            currentDirectory?.let(::loadDirectory)
+        } else {
+            stopDirectoryObserver()
+            val fragment = when (itemId) {
+                R.id.nav_favorites -> FavoritesFragment()
+                R.id.nav_drafts -> DraftsFragment()
+                R.id.nav_tools -> ToolsFragment()
+                else -> SettingsFragment()
+            }
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainer, fragment, itemId.toString())
+                .commit()
+            supportActionBar?.title = topLevelTitle(itemId)
+        }
+        binding.bottomNavigation.visibility = View.VISIBLE
+        binding.bottomDivider.visibility = View.VISIBLE
+        invalidateOptionsMenu()
+    }
+
+    private fun topLevelTitle(itemId: Int): String =
+        when (itemId) {
+                R.id.nav_favorites -> getString(R.string.nav_favorites)
+                R.id.nav_drafts -> getString(R.string.drafts)
+                R.id.nav_tools -> getString(R.string.menu_main_title_01)
+                else -> getString(R.string.menu_main_title_02)
+        }
+
+    fun updateTopLevelToolbar(title: String, showBack: Boolean = false, onBack: (() -> Unit)? = null) {
+        binding.toolbar.title = title
+        binding.toolbar.navigationIcon = if (showBack) ContextCompat.getDrawable(this, R.drawable.ic_back) else null
+        binding.toolbar.setNavigationOnClickListener(if (showBack) View.OnClickListener { onBack?.invoke() } else null)
+    }
+
+    private fun configureSearchItem(item: MenuItem) {
+        val searchView = SearchView(this).apply {
+            queryHint = getString(R.string.file_search_hint)
+            maxWidth = Int.MAX_VALUE
+            setQuery(stateModel.searchQuery, false)
+            setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                override fun onQueryTextSubmit(query: String?): Boolean = true
+                override fun onQueryTextChange(newText: String?): Boolean {
+                    stateModel.searchQuery = newText.orEmpty()
+                    displayDirectoryFiles()
+                    return true
+                }
+            })
+        }
+        item.actionView = searchView
+        item.setOnActionExpandListener(object : MenuItem.OnActionExpandListener {
+            override fun onMenuItemActionExpand(item: MenuItem): Boolean = true
+            override fun onMenuItemActionCollapse(item: MenuItem): Boolean {
+                stateModel.searchQuery = ""
+                displayDirectoryFiles()
+                return true
+            }
+        })
+        if (stateModel.searchQuery.isNotEmpty()) {
+            item.expandActionView()
+            searchView.setQuery(stateModel.searchQuery, false)
+        }
+    }
+
+    private fun showCreateMenu() {
+        val anchor = binding.toolbar.findViewById<View>(MENU_CREATE) ?: binding.toolbar
+        PopupMenu(this, anchor).apply {
+            menu.add("新建文件夹")
+            menu.add("新建文件")
+            setOnMenuItemClickListener { item ->
+                if (item.title == "新建文件") showCreateFileDialog() else showCreateFolderDialog()
+                true
+            }
+            show()
+        }
+    }
+
+    private fun showCreateFolderDialog() {
+        val input = EditText(this).apply {
+            hint = "文件夹名称"
+            setSingleLine(true)
+            setPadding(dp(24), dp(8), dp(24), dp(8))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("新建文件夹")
+            .setView(input)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.confirm, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val entered = input.text.toString()
+                val validation = FileBrowserOrder.validateName(entered)
+                if (validation != null) {
+                    input.error = validation
+                    return@setOnClickListener
+                }
+                val name = entered.trim()
+                val directory = currentDirectory ?: return@setOnClickListener
+                val target = File(directory, name)
+                if (target.exists()) {
+                    input.error = "同名项目已存在"
+                    return@setOnClickListener
+                }
+                val created = runCatching {
+                    target.mkdir()
+                }.getOrDefault(false)
+                if (!created) {
+                    input.error = "创建失败，请检查目录写入权限"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                loadDirectory(directory)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showCreateFileDialog() {
+        val nameInput = EditText(this).apply {
+            hint = "文件名"
+            setSingleLine(true)
+        }
+        val extensionInput = EditText(this).apply {
+            hint = "扩展名"
+            setText("txt")
+            setSingleLine(true)
+        }
+        val inputs = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), 0, dp(24), 0)
+            addView(nameInput, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)))
+            addView(extensionInput, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("新建文件")
+            .setView(inputs)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.confirm, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                nameInput.error = null
+                extensionInput.error = null
+                FileBrowserOrder.validateName(nameInput.text.toString())?.let { error ->
+                    nameInput.error = error
+                    return@setOnClickListener
+                }
+                FileBrowserOrder.validateExtension(extensionInput.text.toString())?.let { error ->
+                    extensionInput.error = error
+                    return@setOnClickListener
+                }
+                val name = FileBrowserOrder.composeFileName(
+                    nameInput.text.toString(),
+                    extensionInput.text.toString()
+                )
+                val directory = currentDirectory ?: return@setOnClickListener
+                val target = File(directory, name)
+                if (target.exists()) {
+                    nameInput.error = "同名项目已存在"
+                    return@setOnClickListener
+                }
+                val created = runCatching { target.createNewFile() }.getOrDefault(false)
+                if (!created) {
+                    nameInput.error = "创建失败，请检查目录写入权限"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                loadDirectory(directory)
+            }
+        }
+        dialog.show()
+        nameInput.requestFocus()
+    }
+
+    private fun showDirectoryMoreMenu() {
+        val anchor = binding.toolbar.findViewById<View>(MENU_MORE) ?: binding.toolbar
+        PopupMenu(this, anchor).apply {
+            menu.add("排序")
+            menu.add("设置")
+            setOnMenuItemClickListener { item ->
+                if (item.title == "排序") showSortDialog()
+                else startActivity(Intent(this@MainActivity, FileManagementSettingsActivity::class.java))
+                true
+            }
+            show()
+        }
+    }
+
+    private fun showSortDialog() {
+        val fields = listOf(
+            "名称" to FileSortField.NAME,
+            "类型" to FileSortField.TYPE,
+            "大小" to FileSortField.SIZE,
+            "日期" to FileSortField.DATE
+        )
+        val directions = listOf("升序" to FileSortDirection.ASCENDING, "降序" to FileSortDirection.DESCENDING)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+        val fieldRows = mutableListOf<Pair<SortOptionRow, FileSortField>>()
+        val directionRows = mutableListOf<Pair<SortOptionRow, FileSortDirection>>()
+        lateinit var refreshSelection: () -> Unit
+        fields.forEach { (label, value) ->
+            val row = sortRow(label, false) {
+                sortField = value
+                SettingsManager.getInstance(this).setFileSortField(value)
+                displayDirectoryFiles()
+                refreshSelection()
+            }
+            fieldRows.add(row to value)
+            container.addView(row.container)
+        }
+        directions.forEach { (label, value) ->
+            val row = sortRow(label, false) {
+                sortDirection = value
+                SettingsManager.getInstance(this).setFileSortDirection(value)
+                displayDirectoryFiles()
+                refreshSelection()
+            }
+            directionRows.add(row to value)
+            container.addView(row.container)
+        }
+        refreshSelection = {
+            fieldRows.forEach { (row, value) -> setSortRowSelected(row, sortField == value) }
+            directionRows.forEach { (row, value) -> setSortRowSelected(row, sortDirection == value) }
+        }
+        refreshSelection()
+        AlertDialog.Builder(this).setTitle("排序").setView(container)
+            .setNegativeButton(R.string.cancel, null).show()
+    }
+
+    private fun sortRow(label: String, selected: Boolean, onClick: () -> Unit): SortOptionRow {
+        val radio = AppCompatRadioButton(this).apply {
+            isClickable = false
+            isFocusable = false
+            buttonTintList = ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(
+                    ContextCompat.getColor(this@MainActivity, R.color.primary),
+                    ContextCompat.getColor(this@MainActivity, R.color.on_surface_variant)
+                )
+            )
+            layoutParams = LinearLayout.LayoutParams(dp(40), LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(16), 0, dp(8), 0)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48))
+            addView(TextView(this@MainActivity).apply {
+                text = label
+                textSize = 16f
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            })
+            addView(radio)
+            setOnClickListener { onClick() }
+        }
+        return SortOptionRow(row, radio).also { setSortRowSelected(it, selected) }
+    }
+
+    private fun setSortRowSelected(row: SortOptionRow, selected: Boolean) {
+        row.container.setBackgroundColor(
+            if (selected) ContextCompat.getColor(this, R.color.primary_container)
+            else android.graphics.Color.TRANSPARENT
+        )
+        row.radioButton.isChecked = selected
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
     
     private fun checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -382,35 +693,28 @@ class MainActivity : AppCompatActivity() {
         
         val files = mutableListOf<File>()
         
-        // 添加父目录（如果不是根目录）
-        val parent = directory.parentFile
-        if (parent != null && parent.canRead()) {
-            // 使用特殊标记表示父目录
-            files.add(File(directory.absolutePath + "/.."))
-        }
-        
         // 添加子目录
         val subDirs = directory.listFiles { file ->
             file.isDirectory && (showHiddenFiles || !file.name.startsWith("."))
-        }?.sortedBy { it.name.lowercase() } ?: emptyList()
+        }?.toList() ?: emptyList()
         files.addAll(subDirs)
         
         // 添加字幕文件
         val subtitleFiles = directory.listFiles { file ->
             file.isFile && (showHiddenFiles || !file.name.startsWith(".")) && FileUtils.isSubtitleFile(file)
-        }?.sortedBy { it.name.lowercase() } ?: emptyList()
+        }?.toList() ?: emptyList()
         files.addAll(subtitleFiles)
         
         // 添加音频文件
         val audioFiles = directory.listFiles { file ->
             file.isFile && (showHiddenFiles || !file.name.startsWith(".")) && FileUtils.isAudioFile(file)
-        }?.sortedBy { it.name.lowercase() } ?: emptyList()
+        }?.toList() ?: emptyList()
         files.addAll(audioFiles)
 
         val archiveFiles = directory.listFiles { file ->
             file.isFile && (showHiddenFiles || !file.name.startsWith(".")) &&
                 ArchiveManager.isRecognizedArchive(file)
-        }?.sortedBy { it.name.lowercase() } ?: emptyList()
+        }?.toList() ?: emptyList()
         files.addAll(archiveFiles)
 
         if (showAllFileTypes) {
@@ -418,20 +722,35 @@ class MainActivity : AppCompatActivity() {
                 file.isFile && (showHiddenFiles || !file.name.startsWith(".")) &&
                     !FileUtils.isSubtitleFile(file) && !FileUtils.isAudioFile(file) &&
                     !ArchiveManager.isRecognizedArchive(file)
-            }?.sortedBy { it.name.lowercase() } ?: emptyList()
+            }?.toList() ?: emptyList()
             files.addAll(otherFiles)
         }
-        visibleFiles.clear()
-        visibleFiles.addAll(files.filter { it.name != ".." })
-        
-        fileAdapter.submitList(files) { fileAdapter.notifyDataSetChanged() }
-        updateSelectionUi()
+        directoryFiles.clear()
+        directoryFiles.addAll(files.distinctBy { it.absolutePath })
+        displayDirectoryFiles()
         startDirectoryObserver(directory)
-        
-        // 更新空状态
-        binding.emptyState.visibility = if (files.isEmpty()) View.VISIBLE else View.GONE
-        binding.rvFileList.visibility = if (files.isEmpty()) View.GONE else View.VISIBLE
         return true
+    }
+
+    private fun displayDirectoryFiles() {
+        val displayed = FileBrowserOrder.sort(
+            FileBrowserOrder.filter(directoryFiles, stateModel.searchQuery),
+            sortField,
+            sortDirection
+        )
+        visibleFiles.clear()
+        visibleFiles.addAll(displayed)
+
+        val adapterItems = mutableListOf<File>()
+        val directory = currentDirectory
+        if (stateModel.searchQuery.isBlank() && directory?.parentFile?.canRead() == true) {
+            adapterItems.add(File(directory.absolutePath + "/.."))
+        }
+        adapterItems.addAll(displayed)
+        fileAdapter.submitList(adapterItems) { fileAdapter.notifyDataSetChanged() }
+        updateSelectionUi()
+        binding.emptyState.visibility = if (adapterItems.isEmpty()) View.VISIBLE else View.GONE
+        binding.rvFileList.visibility = if (adapterItems.isEmpty()) View.GONE else View.VISIBLE
     }
 
     private fun startDirectoryObserver(directory: File) {
@@ -588,8 +907,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateSelectionUi() {
         val operation = pendingFileOperation
         val isSelectionUiActive = selectedPaths.isNotEmpty() || operation != null
-        binding.normalBottomActions.visibility = if (isSelectionUiActive) View.GONE else View.VISIBLE
         binding.selectionBottomActions.visibility = if (isSelectionUiActive) View.VISIBLE else View.GONE
+        val showTopLevelNavigation = !isSelectionUiActive
+        binding.bottomNavigation.visibility = if (showTopLevelNavigation) View.VISIBLE else View.GONE
+        binding.bottomDivider.visibility = if (showTopLevelNavigation) View.VISIBLE else View.GONE
 
         val selectionTitle = when (operation) {
             FileOperation.COPY -> "选择复制目标（已选 ${selectedPaths.size} 项）"
@@ -615,7 +936,7 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.title = if (isSelectionUiActive) {
             selectionTitle
         } else {
-            getString(R.string.app_name)
+            getString(R.string.nav_directory)
         }
         binding.toolbar.navigationIcon = if (isSelectionUiActive) {
             ContextCompat.getDrawable(this, R.drawable.ic_close)
@@ -2074,7 +2395,11 @@ class MainActivity : AppCompatActivity() {
     }
     
     override fun onBackPressed() {
-        if (pendingFileOperation != null) {
+        if (stateModel.selectedTopLevelItem != R.id.nav_directory) {
+            val handled = (supportFragmentManager.findFragmentById(R.id.fragmentContainer) as? TopLevelBackHandler)
+                ?.handleTopLevelBack() == true
+            if (!handled) super.onBackPressed()
+        } else if (pendingFileOperation != null) {
             if (!navigateBackInDestinationSelection()) {
                 cancelDestinationSelection()
             }

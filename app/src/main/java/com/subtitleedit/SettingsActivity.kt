@@ -2,7 +2,6 @@ package com.subtitleedit
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -29,7 +28,7 @@ class SettingsActivity : AppCompatActivity() {
         settingsManager = SettingsManager.getInstance(this)
 
         setupToolbar()
-        setupEncodingSpinner()
+        setupEncodingSetting()
         setupCacheSection()
         setupModelSettings()
         setupTtsSettings()
@@ -37,7 +36,6 @@ class SettingsActivity : AppCompatActivity() {
         setupAiSettings()
         setupLogSettings()
         setupPlaybackSettings()
-        setupFileManagementSettings()
         setupUpdateSettings()
         setupThemeSettings()
         setupAbout()
@@ -72,20 +70,33 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupEncodingSpinner() {
-        val encodings = FileUtils.SUPPORTED_ENCODINGS.map { it.displayName }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, encodings)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.spinnerEncoding.adapter = adapter
+    private fun setupEncodingSetting() {
+        binding.layoutEncoding.setOnClickListener { showEncodingDialog() }
+    }
 
-        // 即时保存
-        binding.spinnerEncoding.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                val selectedEncoding = FileUtils.SUPPORTED_ENCODINGS[position]
-                settingsManager.setDefaultEncoding(selectedEncoding.charset)
+    private fun showEncodingDialog() {
+        val current = FileUtils.SUPPORTED_ENCODINGS.indexOfFirst {
+            it.charset == settingsManager.getDefaultEncoding()
+        }.coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.activity_settings_text_01)
+            .setSingleChoiceItems(
+                FileUtils.SUPPORTED_ENCODINGS.map { it.displayName }.toTypedArray(),
+                current
+            ) { dialog, which ->
+                settingsManager.setDefaultEncoding(FileUtils.SUPPORTED_ENCODINGS[which].charset)
+                updateEncodingLabel()
+                dialog.dismiss()
             }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun updateEncodingLabel() {
+        binding.tvEncoding.text = FileUtils.SUPPORTED_ENCODINGS
+            .firstOrNull { it.charset == settingsManager.getDefaultEncoding() }
+            ?.displayName
+            ?: settingsManager.getDefaultEncoding().displayName()
     }
 
     private fun setupAiSettings() {
@@ -124,15 +135,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun setupUpdateSettings() {
         binding.switchCheckUpdatesOnStartup.setOnCheckedChangeListener { _, isChecked ->
             settingsManager.setCheckUpdatesOnStartup(isChecked)
-        }
-    }
-
-    private fun setupFileManagementSettings() {
-        binding.switchShowAllFileTypes.setOnCheckedChangeListener { _, isChecked ->
-            settingsManager.setShowAllFileTypesEnabled(isChecked)
-        }
-        binding.switchShowHiddenFiles.setOnCheckedChangeListener { _, isChecked ->
-            settingsManager.setShowHiddenFilesEnabled(isChecked)
         }
     }
 
@@ -254,15 +256,10 @@ class SettingsActivity : AppCompatActivity() {
     // ==================== 读写设置 ====================
 
     private fun loadSettings() {
-        // 默认编码
-        val currentEncoding = settingsManager.getDefaultEncoding()
-        val encodingIndex = FileUtils.SUPPORTED_ENCODINGS.indexOfFirst { it.charset == currentEncoding }
-        if (encodingIndex >= 0) binding.spinnerEncoding.setSelection(encodingIndex)
+        updateEncodingLabel()
 
         // 选中字幕循环播放
         binding.switchLoopSelectedSubtitle.isChecked = settingsManager.isLoopSelectedSubtitleEnabled()
-        binding.switchShowAllFileTypes.isChecked = settingsManager.isShowAllFileTypesEnabled()
-        binding.switchShowHiddenFiles.isChecked = settingsManager.isShowHiddenFilesEnabled()
         binding.switchCheckUpdatesOnStartup.isChecked = settingsManager.shouldCheckUpdatesOnStartup()
     }
 
