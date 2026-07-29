@@ -13,6 +13,9 @@ import com.subtitleedit.model.ArchivePreviewItem
 import com.subtitleedit.util.ArchiveManager
 import com.subtitleedit.util.FileUtils
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class ArchivePreviewAdapter(
     private val onDirectoryClick: (ArchivePreviewItem) -> Unit
@@ -30,14 +33,31 @@ class ArchivePreviewAdapter(
         private val name: TextView = itemView.findViewById(R.id.tvFileName)
         private val detailsRow: View = itemView.findViewById(R.id.fileDetailsRow)
         private val size: TextView = itemView.findViewById(R.id.tvFileSize)
+        private val mediaDuration: TextView = itemView.findViewById(R.id.tvMediaDuration)
         private val extension: TextView = itemView.findViewById(R.id.tvFileExtension)
+        private val modifiedTime: TextView = itemView.findViewById(R.id.tvFileModifiedTime)
+        private val modifiedTimeFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
         fun bind(item: ArchivePreviewItem) {
             name.text = item.name
             icon.setImageResource(iconFor(item))
+            mediaDuration.visibility = View.GONE
+            if (item.modifiedTimeMillis > 0L) {
+                modifiedTime.text = modifiedTimeFormat.format(Date(item.modifiedTimeMillis))
+                modifiedTime.visibility = View.VISIBLE
+            } else {
+                modifiedTime.visibility = View.GONE
+            }
             if (item.isDirectory) {
-                detailsRow.visibility = View.GONE
-                extension.visibility = View.GONE
+                detailsRow.visibility = View.VISIBLE
+                size.text = if (item.itemCount == 0) {
+                    itemView.context.getString(R.string.directory_empty)
+                } else {
+                    itemView.context.getString(R.string.directory_item_count, item.itemCount)
+                }
+                size.visibility = View.VISIBLE
+                extension.text = ""
+                extension.visibility = View.INVISIBLE
                 itemView.isClickable = true
                 itemView.isFocusable = true
                 itemView.setOnClickListener { onDirectoryClick(item) }

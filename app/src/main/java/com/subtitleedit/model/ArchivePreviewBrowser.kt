@@ -6,13 +6,40 @@ data class ArchivePreviewItem(
     val name: String,
     val path: String,
     val size: Long,
-    val isDirectory: Boolean
+    val isDirectory: Boolean,
+    val modifiedTimeMillis: Long,
+    val itemCount: Int
 )
 
 class ArchivePreviewBrowser(entries: List<ArchiveManager.EntryInfo>) {
     private val normalizedEntries = entries.mapNotNull { entry ->
         val path = entry.name.replace('\\', '/').trim('/')
         if (path.isEmpty()) null else entry.copy(name = path)
+    }
+    private val childPathsByDirectory = buildMap<String, Set<String>> {
+        val mutableChildren = linkedMapOf<String, MutableSet<String>>()
+        normalizedEntries.forEach { entry ->
+            var parent = ""
+            entry.name.split('/').forEach { segment ->
+                val childPath = if (parent.isEmpty()) segment else "$parent/$segment"
+                mutableChildren.getOrPut(parent) { linkedSetOf() }.add(childPath)
+                parent = childPath
+            }
+        }
+        mutableChildren.forEach { (directory, children) -> put(directory, children) }
+    }
+    private val descendantModifiedTimeByDirectory = buildMap<String, Long> {
+        normalizedEntries.forEach { entry ->
+            if (entry.modifiedTimeMillis <= 0L) return@forEach
+            val segments = entry.name.split('/')
+            for (depth in 1 until segments.size) {
+                val directoryPath = segments.take(depth).joinToString("/")
+                val current = this[directoryPath] ?: 0L
+                if (entry.modifiedTimeMillis > current) {
+                    put(directoryPath, entry.modifiedTimeMillis)
+                }
+            }
+        }
     }
 
     fun itemsAt(directory: String): List<ArchivePreviewItem> {
@@ -32,11 +59,21 @@ class ArchivePreviewBrowser(entries: List<ArchiveManager.EntryInfo>) {
                 name = childName,
                 path = childPath,
                 size = if (hasDescendants) -1L else entry.size,
-                isDirectory = hasDescendants || entry.isDirectory
+                isDirectory = hasDescendants || entry.isDirectory,
+                modifiedTimeMillis = if (hasDescendants) {
+                    descendantModifiedTimeByDirectory[childPath] ?: 0L
+                } else {
+                    entry.modifiedTimeMillis
+                },
+                itemCount = childPathsByDirectory[childPath]?.size ?: 0
             )
             val existing = children[childName]
             if (existing == null || (!existing.isDirectory && candidate.isDirectory)) {
                 children[childName] = candidate
+            } else if (existing.isDirectory && candidate.isDirectory &&
+                !hasDescendants && entry.isDirectory && candidate.modifiedTimeMillis > 0L
+            ) {
+                children[childName] = existing.copy(modifiedTimeMillis = candidate.modifiedTimeMillis)
             }
         }
 

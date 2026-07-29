@@ -50,7 +50,8 @@ object ArchiveManager {
         val name: String,
         val size: Long,
         val compressedSize: Long,
-        val isDirectory: Boolean
+        val isDirectory: Boolean,
+        val modifiedTimeMillis: Long = 0L
     )
 
     data class TestResult(val entryCount: Int, val totalBytes: Long)
@@ -257,7 +258,7 @@ object ArchiveManager {
         return entries.map {
             counter.addEntry(); if (!it.isDirectory) counter.addBytes(it.size.coerceAtLeast(0L))
             validateEntryName(it.name)
-            EntryInfo(it.name, it.size, it.compressedSize, it.isDirectory)
+            EntryInfo(it.name, it.size, it.compressedSize, it.isDirectory, it.modifiedTimeMillis)
         }
     }
 

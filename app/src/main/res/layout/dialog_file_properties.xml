@@ -19,7 +19,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:text="文件信息"
+            android:text="详情"
             android:textColor="@color/on_surface"
             android:textSize="16sp"
             android:textStyle="bold" />
@@ -152,6 +152,14 @@
                 tools:text="2026-07-29 15:30:00" />
 
         </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/propertyLoadingIndicator"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp" />
 
         <TextView
             android:id="@+id/tvMediaInfoTitle"

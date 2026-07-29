@@ -101,8 +101,10 @@ class FileListAdapter(
                 ivFileIcon.setImageResource(R.drawable.ic_folder)
                 tvMediaDuration.tag = null
                 tvMediaDuration.visibility = View.GONE
-                tvFileExtension.visibility = View.GONE
-                tvFileModifiedTime.visibility = View.GONE
+                tvFileExtension.text = ""
+                tvFileExtension.visibility = if (file.name == "..") View.GONE else View.INVISIBLE
+                tvFileModifiedTime.text = modifiedTimeFormat.format(Date(file.lastModified()))
+                tvFileModifiedTime.visibility = if (file.name == "..") View.GONE else View.VISIBLE
                 if (isRestricted || file.name == "..") {
                     fileDetailsRow.visibility = View.GONE
                     tvFileSize.tag = null

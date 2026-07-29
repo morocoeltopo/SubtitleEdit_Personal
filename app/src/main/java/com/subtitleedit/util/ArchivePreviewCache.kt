@@ -11,7 +11,7 @@ import java.util.UUID
 
 object ArchivePreviewCache {
     private const val MAGIC = 0x41505256
-    private const val VERSION = 1
+    private const val VERSION = 2
     private const val MAX_ENTRIES = 100_000
     private const val MAX_NAME_BYTES = 1024 * 1024
 
@@ -32,6 +32,7 @@ object ArchivePreviewCache {
                     output.writeLong(entry.size)
                     output.writeLong(entry.compressedSize)
                     output.writeBoolean(entry.isDirectory)
+                    output.writeLong(entry.modifiedTimeMillis)
                 }
             }
             return outputFile
@@ -43,9 +44,11 @@ object ArchivePreviewCache {
 
     fun read(file: File): List<ArchiveManager.EntryInfo> {
         DataInputStream(BufferedInputStream(file.inputStream())).use { input ->
-            if (input.readInt() != MAGIC || input.readInt() != VERSION) {
+            if (input.readInt() != MAGIC) {
                 throw IOException("预览数据格式无效")
             }
+            val version = input.readInt()
+            if (version !in 1..VERSION) throw IOException("预览数据格式无效")
             val count = input.readInt()
             if (count !in 0..MAX_ENTRIES) throw IOException("预览条目数量无效")
             return List(count) {
@@ -53,12 +56,12 @@ object ArchivePreviewCache {
                 if (nameLength !in 0..MAX_NAME_BYTES) throw IOException("预览条目名称无效")
                 val nameBytes = ByteArray(nameLength)
                 input.readFully(nameBytes)
-                ArchiveManager.EntryInfo(
-                    name = nameBytes.toString(Charsets.UTF_8),
-                    size = input.readLong(),
-                    compressedSize = input.readLong(),
-                    isDirectory = input.readBoolean()
-                )
+                val name = nameBytes.toString(Charsets.UTF_8)
+                val size = input.readLong()
+                val compressedSize = input.readLong()
+                val isDirectory = input.readBoolean()
+                val modifiedTimeMillis = if (version >= 2) input.readLong() else 0L
+                ArchiveManager.EntryInfo(name, size, compressedSize, isDirectory, modifiedTimeMillis)
             }
         }
     }

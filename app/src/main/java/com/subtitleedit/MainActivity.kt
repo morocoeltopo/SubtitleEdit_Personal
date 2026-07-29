@@ -11,6 +11,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.FileObserver
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Menu
 import android.view.MenuItem
@@ -69,6 +72,10 @@ class MainActivity : AppCompatActivity() {
         const val MENU_SELECT_ALL = 0x10001
         const val MENU_SELECT_RANGE = 0x10002
         const val CONFLICT_WAIT_INTERVAL_MS = 250L
+        const val DIRECTORY_REFRESH_DELAY_MS = 250L
+        val DIRECTORY_CHANGE_EVENTS = FileObserver.CREATE or FileObserver.DELETE or
+            FileObserver.MOVED_FROM or FileObserver.MOVED_TO or FileObserver.CLOSE_WRITE or
+            FileObserver.ATTRIB or FileObserver.DELETE_SELF or FileObserver.MOVE_SELF
         val VIDEO_EXTENSIONS = setOf(
             "mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v",
             "ts", "3gp", "mpg", "mpeg", "mts", "m2ts"
@@ -97,6 +104,14 @@ class MainActivity : AppCompatActivity() {
     private var updateDialogShown = false
     private var showAllFileTypes = false
     private var showHiddenFiles = false
+    private val directoryRefreshHandler = Handler(Looper.getMainLooper())
+    private var directoryObserver: FileObserver? = null
+    private var observedDirectoryPath: String? = null
+    private var directoryWatchingEnabled = false
+    private val directoryRefreshRunnable = Runnable {
+        val directory = currentDirectory ?: return@Runnable
+        if (directory.exists() && directory.canRead()) loadDirectory(directory)
+    }
 
     private enum class ArchiveAction { PREVIEW, EXTRACT_CURRENT, TEST }
 
@@ -167,13 +182,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        directoryWatchingEnabled = true
         val newShowAllFileTypes = SettingsManager.getInstance(this).isShowAllFileTypesEnabled()
         val newShowHiddenFiles = SettingsManager.getInstance(this).isShowHiddenFilesEnabled()
-        if (newShowAllFileTypes != showAllFileTypes || newShowHiddenFiles != showHiddenFiles) {
-            showAllFileTypes = newShowAllFileTypes
-            showHiddenFiles = newShowHiddenFiles
-            currentDirectory?.let(::loadDirectory)
-        }
+        showAllFileTypes = newShowAllFileTypes
+        showHiddenFiles = newShowHiddenFiles
+        currentDirectory?.let(::loadDirectory)
         pendingUpdate?.let(::showPendingUpdate)
         if (!updateCheckStarted && SettingsManager.getInstance(this).shouldCheckUpdatesOnStartup()) {
             updateCheckStarted = true
@@ -186,6 +200,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    override fun onPause() {
+        directoryWatchingEnabled = false
+        stopDirectoryObserver()
+        super.onPause()
     }
 
     private fun showPendingUpdate(update: UpdateChecker.UpdateInfo) {
@@ -404,13 +424,51 @@ class MainActivity : AppCompatActivity() {
         visibleFiles.clear()
         visibleFiles.addAll(files.filter { it.name != ".." })
         
-        fileAdapter.submitList(files)
+        fileAdapter.submitList(files) { fileAdapter.notifyDataSetChanged() }
         updateSelectionUi()
+        startDirectoryObserver(directory)
         
         // 更新空状态
         binding.emptyState.visibility = if (files.isEmpty()) View.VISIBLE else View.GONE
         binding.rvFileList.visibility = if (files.isEmpty()) View.GONE else View.VISIBLE
         return true
+    }
+
+    private fun startDirectoryObserver(directory: File) {
+        if (!directoryWatchingEnabled) return
+        val path = runCatching { directory.canonicalPath }.getOrElse { directory.absolutePath }
+        if (path == observedDirectoryPath && directoryObserver != null) return
+        stopDirectoryObserver()
+
+        directoryObserver = createDirectoryObserver(directory).also { observer ->
+            observedDirectoryPath = path
+            observer.startWatching()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun createDirectoryObserver(directory: File): FileObserver =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            object : FileObserver(directory, DIRECTORY_CHANGE_EVENTS) {
+                override fun onEvent(event: Int, path: String?) = scheduleDirectoryRefresh(event)
+            }
+        } else {
+            object : FileObserver(directory.absolutePath, DIRECTORY_CHANGE_EVENTS) {
+                override fun onEvent(event: Int, path: String?) = scheduleDirectoryRefresh(event)
+            }
+        }
+
+    private fun scheduleDirectoryRefresh(event: Int) {
+        if (!directoryWatchingEnabled || event and DIRECTORY_CHANGE_EVENTS == 0) return
+        directoryRefreshHandler.removeCallbacks(directoryRefreshRunnable)
+        directoryRefreshHandler.postDelayed(directoryRefreshRunnable, DIRECTORY_REFRESH_DELAY_MS)
+    }
+
+    private fun stopDirectoryObserver() {
+        directoryRefreshHandler.removeCallbacks(directoryRefreshRunnable)
+        directoryObserver?.stopWatching()
+        directoryObserver = null
+        observedDirectoryPath = null
     }
     
     private fun updatePathDisplay() {
@@ -730,7 +788,7 @@ class MainActivity : AppCompatActivity() {
     private fun showMoreActions() {
         PopupMenu(this, binding.btnMoreSelected).apply {
             val compressItem = menu.add("压缩")
-            val propertiesItem = menu.add("查看属性")
+            val propertiesItem = menu.add("详情")
             setOnMenuItemClickListener { item ->
                 when (item) {
                     compressItem -> showCreateArchiveDialog()
@@ -1569,17 +1627,10 @@ class MainActivity : AppCompatActivity() {
     private fun showSelectedProperties() {
         val files = selectedFiles()
         if (files.isEmpty()) return
-        lifecycleScope.launch {
-            if (files.size == 1) {
-                val properties = withContext(Dispatchers.IO) { fileProperties(files.first()) }
-                showFilePropertiesDialog(properties)
-                return@launch
-            }
-
-            val totalSize = withContext(Dispatchers.IO) {
-                files.sumOf { if (it.isDirectory) directorySize(it) else it.length() }
-            }
-            showMultipleFilePropertiesDialog(files.size, totalSize)
+        if (files.size == 1) {
+            showFilePropertiesDialog(files.first())
+        } else {
+            showMultipleFilePropertiesDialog(files)
         }
     }
 
@@ -1819,49 +1870,80 @@ class MainActivity : AppCompatActivity() {
         else -> mimeType.substringAfter('/', mimeType)
     }
 
-    private fun showFilePropertiesDialog(properties: FilePropertiesInfo) {
+    private fun showFilePropertiesDialog(file: File) {
         val content = layoutInflater.inflate(R.layout.dialog_file_properties, null)
-        content.findViewById<TextView>(R.id.tvPropertyName).text = properties.name
-        content.findViewById<TextView>(R.id.tvPropertyType).text = properties.type
-        content.findViewById<TextView>(R.id.tvPropertySize).text = properties.size
-        content.findViewById<TextView>(R.id.tvPropertyModifiedTime).text = properties.modifiedTime
-        content.findViewById<TextView>(R.id.tvMediaInfoTitle).apply {
-            text = properties.mediaInfoTitle
-            visibility = if (properties.mediaInfoTitle == null) View.GONE else View.VISIBLE
-        }
-        content.findViewById<LinearLayout>(R.id.mediaPropertiesContainer).apply {
-            properties.mediaDetails.forEach { detail ->
-                val row = layoutInflater.inflate(R.layout.item_file_property, this, false)
-                row.findViewById<TextView>(R.id.tvPropertyLabel).text = detail.label
-                row.findViewById<TextView>(R.id.tvPropertyValue).text = detail.value
-                addView(row)
-            }
-            visibility = if (properties.mediaDetails.isEmpty()) View.GONE else View.VISIBLE
-        }
+        content.findViewById<TextView>(R.id.tvPropertyName).text = file.name
+        content.findViewById<TextView>(R.id.tvPropertyType).text =
+            if (file.isDirectory) "文件夹" else file.extension.uppercase().ifBlank { "未知" } + " 文件"
+        content.findViewById<TextView>(R.id.tvPropertySize).text = getString(R.string.loading)
+        content.findViewById<TextView>(R.id.tvPropertyModifiedTime).text =
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(file.lastModified()))
         content.findViewById<TextView>(R.id.tvPropertyPath).apply {
-            text = properties.path
-            contentDescription = "点击复制路径：${properties.path}"
+            text = file.absolutePath
+            contentDescription = "点击复制路径：${file.absolutePath}"
             setOnClickListener {
                 val clipboard = getSystemService(android.content.ClipboardManager::class.java)
-                clipboard.setPrimaryClip(ClipData.newPlainText("文件路径", properties.path))
+                clipboard.setPrimaryClip(ClipData.newPlainText("文件路径", file.absolutePath))
                 showShortToast("路径已复制")
             }
         }
 
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setView(content)
             .setPositiveButton("确定", null)
             .show()
+
+        val loadJob = lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { fileProperties(file) } }
+            if (!dialog.isShowing) return@launch
+            content.findViewById<View>(R.id.propertyLoadingIndicator).visibility = View.GONE
+            result.onSuccess { properties ->
+                content.findViewById<TextView>(R.id.tvPropertyType).text = properties.type
+                content.findViewById<TextView>(R.id.tvPropertySize).text = properties.size
+                content.findViewById<TextView>(R.id.tvPropertyModifiedTime).text = properties.modifiedTime
+                content.findViewById<TextView>(R.id.tvMediaInfoTitle).apply {
+                    text = properties.mediaInfoTitle
+                    visibility = if (properties.mediaInfoTitle == null) View.GONE else View.VISIBLE
+                }
+                content.findViewById<LinearLayout>(R.id.mediaPropertiesContainer).apply {
+                    removeAllViews()
+                    properties.mediaDetails.forEach { detail ->
+                        val row = layoutInflater.inflate(R.layout.item_file_property, this, false)
+                        row.findViewById<TextView>(R.id.tvPropertyLabel).text = detail.label
+                        row.findViewById<TextView>(R.id.tvPropertyValue).text = detail.value
+                        addView(row)
+                    }
+                    visibility = if (properties.mediaDetails.isEmpty()) View.GONE else View.VISIBLE
+                }
+            }.onFailure {
+                content.findViewById<TextView>(R.id.tvPropertySize).text = getString(R.string.read_failed)
+            }
+        }
+        dialog.setOnDismissListener { loadJob.cancel() }
     }
 
-    private fun showMultipleFilePropertiesDialog(itemCount: Int, totalSize: Long) {
+    private fun showMultipleFilePropertiesDialog(files: List<File>) {
         val content = layoutInflater.inflate(R.layout.dialog_multiple_file_properties, null)
-        content.findViewById<TextView>(R.id.tvSelectedItemCount).text = "$itemCount 项"
-        content.findViewById<TextView>(R.id.tvSelectedTotalSize).text = FileUtils.formatFileSize(totalSize)
-        AlertDialog.Builder(this)
+        content.findViewById<TextView>(R.id.tvSelectedItemCount).text = "${files.size} 项"
+        val totalSizeView = content.findViewById<TextView>(R.id.tvSelectedTotalSize).apply {
+            text = getString(R.string.loading)
+        }
+        val dialog = AlertDialog.Builder(this)
             .setView(content)
             .setPositiveButton("确定", null)
             .show()
+
+        val loadJob = lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { files.sumOf { if (it.isDirectory) directorySize(it) else it.length() } }
+            }
+            if (!dialog.isShowing) return@launch
+            totalSizeView.text = result.fold(
+                onSuccess = FileUtils::formatFileSize,
+                onFailure = { getString(R.string.read_failed) }
+            )
+        }
+        dialog.setOnDismissListener { loadJob.cancel() }
     }
 
     private fun showShortToast(message: String) {
