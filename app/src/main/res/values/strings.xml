@@ -2,6 +2,12 @@
 <resources>
     <string name="nav_directory">目录</string>
     <string name="nav_favorites">常用目录</string>
+    <string name="add_favorite_directory">添加常用目录</string>
+    <string name="no_favorite_directories">尚未添加常用目录</string>
+    <string name="favorite_directory_access_failed">无法访问所选目录</string>
+    <string name="favorite_directory_already_added">该目录已添加</string>
+    <string name="remove_favorite_directory">移除常用目录</string>
+    <string name="remove_favorite_directory_confirm">确定从常用目录中移除“%1$s”吗？</string>
     <string name="file_search_hint">搜索当前目录</string>
     <string name="file_management_settings">文件管理设置</string>
     <string name="app_name">SubtitleEdit</string>

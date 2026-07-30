@@ -375,6 +375,17 @@ class MainActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener(if (showBack) View.OnClickListener { onBack?.invoke() } else null)
     }
 
+    fun openDirectoryFromFavorites(directory: File) {
+        if (!loadDirectory(directory)) return
+        directoryHistory.clear()
+        selectedPaths.clear()
+        pendingFileOperation = null
+        pendingArchiveFile = null
+        destinationNavigationHistory.clear()
+        stateModel.searchQuery = ""
+        binding.bottomNavigation.selectedItemId = R.id.nav_directory
+    }
+
     private fun configureSearchItem(item: MenuItem) {
         val searchView = SearchView(this).apply {
             queryHint = getString(R.string.file_search_hint)

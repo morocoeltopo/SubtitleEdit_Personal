@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -18,9 +20,12 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.subtitleedit.adapter.FileListAdapter
 import com.subtitleedit.databinding.ActivityDraftsBinding
 import com.subtitleedit.databinding.ActivitySettingsBinding
 import com.subtitleedit.databinding.ActivityToolsBinding
+import com.subtitleedit.databinding.FragmentFavoritesBinding
+import com.subtitleedit.util.DirectoryDisplayPath
 import com.subtitleedit.util.DraftManager
 import com.subtitleedit.util.FileUtils
 import com.subtitleedit.util.SettingsManager
@@ -32,8 +37,92 @@ interface TopLevelBackHandler {
 }
 
 class FavoritesFragment : Fragment() {
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, state: Bundle?): View =
-        View(requireContext()).apply { setBackgroundColor(resources.getColor(R.color.background, context.theme)) }
+    private var binding: FragmentFavoritesBinding? = null
+    private lateinit var adapter: FileListAdapter
+    private val preferences: SharedPreferences by lazy {
+        requireContext().getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    }
+    private val directoryPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) addDirectory(uri)
+    }
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, state: Bundle?): View {
+        val viewBinding = FragmentFavoritesBinding.inflate(inflater, container, false)
+        binding = viewBinding
+        adapter = FileListAdapter(
+            onItemClick = { directory ->
+                (activity as? MainActivity)?.openDirectoryFromFavorites(directory)
+            },
+            onItemLongClick = ::confirmRemoveDirectory
+        )
+        viewBinding.rvFavoriteDirectories.layoutManager = LinearLayoutManager(requireContext())
+        viewBinding.rvFavoriteDirectories.adapter = adapter
+        viewBinding.btnAddFavoriteDirectory.setOnClickListener { directoryPicker.launch(null) }
+        loadDirectories()
+        return viewBinding.root
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::adapter.isInitialized) loadDirectories()
+    }
+
+    private fun addDirectory(uri: Uri) {
+        runCatching {
+            requireContext().contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+
+        val directory = File(DirectoryDisplayPath.fromUri(requireContext(), uri))
+        if (!directory.isDirectory || !directory.canRead()) {
+            Toast.makeText(requireContext(), R.string.favorite_directory_access_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val paths = savedPaths().toMutableSet()
+        if (!paths.add(directory.absolutePath)) {
+            Toast.makeText(requireContext(), R.string.favorite_directory_already_added, Toast.LENGTH_SHORT).show()
+            return
+        }
+        preferences.edit().putStringSet(KEY_PATHS, paths).apply()
+        loadDirectories()
+    }
+
+    private fun confirmRemoveDirectory(directory: File) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.remove_favorite_directory)
+            .setMessage(getString(R.string.remove_favorite_directory_confirm, directory.name))
+            .setPositiveButton(R.string.confirm) { _, _ ->
+                val paths = savedPaths().toMutableSet()
+                paths.remove(directory.absolutePath)
+                preferences.edit().putStringSet(KEY_PATHS, paths).apply()
+                loadDirectories()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun savedPaths(): Set<String> = preferences.getStringSet(KEY_PATHS, emptySet())?.toSet().orEmpty()
+
+    private fun loadDirectories() {
+        val directories = savedPaths().map(::File).sortedBy { it.name.lowercase(Locale.getDefault()) }
+        adapter.submitList(directories)
+        binding?.emptyFavoriteDirectories?.visibility = if (directories.isEmpty()) View.VISIBLE else View.GONE
+        binding?.rvFavoriteDirectories?.visibility = if (directories.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    override fun onDestroyView() {
+        binding?.rvFavoriteDirectories?.adapter = null
+        binding = null
+        super.onDestroyView()
+    }
+
+    private companion object {
+        const val PREFERENCES_NAME = "favorite_directories"
+        const val KEY_PATHS = "paths"
+    }
 }
 
 class ToolsFragment : Fragment() {
