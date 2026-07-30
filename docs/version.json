@@ -1,7 +1,7 @@
 {
-  "versionCode": 2,
-  "versionName": "1.1.2",
+  "versionCode": 3,
+  "versionName": "1.1.3",
   "downloadUrl": "https://github.com/nihaina/SubtitleEditforAndroid/releases/latest",
-  "releaseNotes": "修复波形图拖拽时异常跳动\n优化波形图双指缩放\n优化播放头的移动逻辑\n人声分离添加可选优化项\n添加模型一键下载导入及相关管理页",
+  "releaseNotes": "修复转换音视频格式缓存不会清理的问题\n修改界面布局\n完善文件管理功能\n支持parakeet模型\n\n常用目录暂不可用",
   "forceUpdate": false
 }

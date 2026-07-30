@@ -748,7 +748,7 @@ class MainActivity : AppCompatActivity() {
         }
         adapterItems.addAll(displayed)
         fileAdapter.submitList(adapterItems) { fileAdapter.notifyDataSetChanged() }
-        updateSelectionUi()
+        updateSelectionUi(invalidateMenu = false)
         binding.emptyState.visibility = if (adapterItems.isEmpty()) View.VISIBLE else View.GONE
         binding.rvFileList.visibility = if (adapterItems.isEmpty()) View.GONE else View.VISIBLE
     }
@@ -904,7 +904,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun selectedFiles(): List<File> = selectedPaths.map(::File).filter { it.exists() }
 
-    private fun updateSelectionUi() {
+    private fun updateSelectionUi(invalidateMenu: Boolean = true) {
         val operation = pendingFileOperation
         val isSelectionUiActive = selectedPaths.isNotEmpty() || operation != null
         binding.selectionBottomActions.visibility = if (isSelectionUiActive) View.VISIBLE else View.GONE
@@ -949,7 +949,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             null
         })
-        invalidateOptionsMenu()
+        if (invalidateMenu) invalidateOptionsMenu()
         fileAdapter.updateSelection(selectedPaths.isNotEmpty() && operation == null, selectedPaths)
     }
 

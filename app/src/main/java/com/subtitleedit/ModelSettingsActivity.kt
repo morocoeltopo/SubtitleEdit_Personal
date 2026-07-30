@@ -102,6 +102,7 @@ class ModelSettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityModelSettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ToolCardShadow.removeFrom(binding.root)
 
         settingsManager = SettingsManager.getInstance(this)
 

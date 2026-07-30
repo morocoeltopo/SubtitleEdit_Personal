@@ -21,6 +21,7 @@ class SpeechToSubtitleSettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySpeechToSubtitleSettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ToolCardShadow.removeFrom(binding.root)
 
         settingsManager = SettingsManager.getInstance(this)
 

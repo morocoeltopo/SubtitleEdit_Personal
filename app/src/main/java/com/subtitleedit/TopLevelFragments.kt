@@ -48,6 +48,14 @@ class ToolsFragment : Fragment() {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
+        ToolCardShadow.remove(
+            viewBinding.cardBatchConvert,
+            viewBinding.cardSubtitleFormat,
+            viewBinding.cardVocalSeparation,
+            viewBinding.cardSpeechToSubtitle,
+            viewBinding.cardMediaConvert,
+            viewBinding.cardAutoTimestamp
+        )
         viewBinding.cardBatchConvert.setOnClickListener { open(BatchConvertActivity::class.java) }
         viewBinding.cardSubtitleFormat.setOnClickListener { open(SubtitleFormatSelectActivity::class.java) }
         viewBinding.cardMediaConvert.setOnClickListener { open(MediaConvertActivity::class.java) }

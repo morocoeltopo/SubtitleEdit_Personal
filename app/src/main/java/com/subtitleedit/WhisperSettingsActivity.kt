@@ -17,6 +17,7 @@ class WhisperSettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySpeechToSubtitleSettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ToolCardShadow.removeFrom(binding.root)
         settings = SettingsManager.getInstance(this)
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)

@@ -16,6 +16,14 @@ class ToolsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityToolsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ToolCardShadow.remove(
+            binding.cardBatchConvert,
+            binding.cardSubtitleFormat,
+            binding.cardVocalSeparation,
+            binding.cardSpeechToSubtitle,
+            binding.cardMediaConvert,
+            binding.cardAutoTimestamp
+        )
         
         setupToolbar()
         setupButtons()

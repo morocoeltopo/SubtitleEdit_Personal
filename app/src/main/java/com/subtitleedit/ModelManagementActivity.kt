@@ -251,6 +251,7 @@ class ModelManagementActivity : AppCompatActivity() {
         row.addView(details)
         row.addView(deleteAction)
         card.addView(row)
+        ToolCardShadow.remove(card)
         return card
     }
 
